@@ -1,7 +1,9 @@
 from colorama import *
+import os
 
 starting_inv = None  # Global variable to store starting_inv
 total_profit = 0
+abyssal_runs = 0  # Counter for total Abyssals run
 exit_program = False  # Flag to indicate when to exit the main menu loop
 
 def menu():
@@ -15,10 +17,12 @@ def menu():
         user_input = input(menu_text)
 
         if user_input == "1":
+            os.system('CLS')
             abyssMain()
 
         elif user_input == "2":
             print(f"\n{Fore.GREEN}Total Profits: {Fore.RED}{total_profit}m")
+            print(f"Total Abyssals Run: {abyssal_runs}")
             print("goodbye\n")
             break  # Exit the loop and end the program
 
@@ -26,7 +30,7 @@ def menu():
             print(f"\n{Fore.YELLOW}Invalid choice. Please enter 1 or 2.")
 
 def abyssMain():
-    global starting_inv, exit_program  # Use the global variables
+    global starting_inv, exit_program, abyssal_runs  # Use the global variables
     if starting_inv is None:
         starting_inv = startingInven()  # Ask for starting_inv only if it's None
 
@@ -34,10 +38,12 @@ def abyssMain():
         after_inv = afterInven()
         new_total = profitCalc(starting_inv, after_inv)
         starting_inv = new_total  # Update global starting_inv with new_total
+        abyssal_runs += 1  # Increment the counter for each Abyssal run
 
         user_input = input(f"{Fore.GREEN}Track another Abyssal run? (Y/N): {Fore.RED}")
         if user_input.upper() == "N":
-            print(f"\n{Fore.GREEN}Total Profits: {total_profit}m")
+            print(f"\n{Fore.GREEN}Total Profits: {Fore.RED}{total_profit}m")
+            print(f"Total Abyssals Run: {abyssal_runs}")
             exit_program = True
             break  # Exit the loop to return to main menu
         elif user_input.upper() != "Y":
@@ -49,7 +55,7 @@ def profitCalc(starting_inv, after_inv):
     new_total = starting_inv + profit
     total_profit += profit
 
-    profit_string = f"\n{Fore.GREEN}Profit is going to be {Fore.RED}{profit} Million\n{Fore.GREEN}New total is going to be: {Fore.RED}{new_total}"
+    profit_string = f"\n{Fore.GREEN}Profit: {Fore.RED}{profit} Million\n{Fore.GREEN}New total: {Fore.RED}{new_total}\n"
     print(profit_string)
     return new_total
 
