@@ -29,19 +29,16 @@ def abyssMain():
     if starting_inv is None:
         starting_inv = startingInven()  # Ask for starting_inv only if it's None
 
-    after_inv = afterInven()
-    new_total = profitCalc(starting_inv, after_inv)
-    starting_inv = new_total  # Update global starting_inv with new_total
-
     while True:
+        after_inv = afterInven()
+        new_total = profitCalc(starting_inv, after_inv)
+        starting_inv = new_total  # Update global starting_inv with new_total
+
         user_input = input(f"{Fore.GREEN}Track another Abyssal run? (Y/N): {Fore.RED}")
         if user_input.upper() == "N":
+            print(f"\n{Fore.GREEN}Total Profits: {total_profit}m\n")
             break  # Exit the loop and return to main menu
-        elif user_input.upper() == "Y":
-            after_inv = afterInven()  # Ask for the next ISK total
-            new_total = profitCalc(starting_inv, after_inv)  # Calculate profit with the new total
-            starting_inv = new_total  # Update starting_inv for the next iteration
-        else:
+        elif user_input.upper() != "Y":
             print(f"{Fore.YELLOW}Invalid input. Please enter Y or N.")
 
 def profitCalc(starting_inv, after_inv):
