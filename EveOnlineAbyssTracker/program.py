@@ -10,6 +10,7 @@ def menu():
     global total_profit, exit_program
     while not exit_program:
         menu_text = f"""{Fore.GREEN}Welcome to my EVE ONLINE Python projects.
+
 1. Abyss Money Tracker
 2. Exit
 
@@ -21,8 +22,6 @@ def menu():
             abyssMain()
 
         elif user_input == "2":
-            print(f"\n{Fore.GREEN}Total Profits: {Fore.RED}{total_profit}m")
-            print(f"Total Abyssals Run: {abyssal_runs}")
             print("goodbye\n")
             break  # Exit the loop and end the program
 
@@ -39,11 +38,11 @@ def abyssMain():
         new_total = profitCalc(starting_inv, after_inv)
         starting_inv = new_total  # Update global starting_inv with new_total
         abyssal_runs += 1  # Increment the counter for each Abyssal run
-
         user_input = input(f"{Fore.GREEN}Track another Abyssal run? (Y/N): {Fore.RED}")
+        os.system("CLS")
         if user_input.upper() == "N":
             print(f"\n{Fore.GREEN}Total Profits: {Fore.RED}{total_profit}m")
-            print(f"Total Abyssals Run: {abyssal_runs}")
+            print(f"{Fore.GREEN}Total Abyssals Run: {Fore.RED}{abyssal_runs}")
             exit_program = True
             break  # Exit the loop to return to main menu
         elif user_input.upper() != "Y":
