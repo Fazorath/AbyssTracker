@@ -42,7 +42,11 @@ def abyssMain():
         os.system("CLS")
         if user_input.upper() == "N":
             print(f"\n{Fore.GREEN}Total Profits: {Fore.RED}{total_profit}m")
+<<<<<<< HEAD
             print(f"{Fore.GREEN}Total Abyssals Run: {Fore.RED}{abyssal_runs}\n\n")
+=======
+            print(f"{Fore.GREEN}Total Abyssals Run: {Fore.RED}{abyssal_runs}\n")
+>>>>>>> 0cd44cae49fa77e7eb26a935be58cf174af78650
             exit_program = True
             break  # Exit the loop to return to main menu
         elif user_input.upper() != "Y":
