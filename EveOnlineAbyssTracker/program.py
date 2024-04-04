@@ -18,7 +18,7 @@ def menu():
             abyssMain()
 
         elif user_input == "2":
-            print(f"\n{Fore.GREEN}Total Profits: {total_profit}m")
+            print(f"\n{Fore.GREEN}Total Profits: {Fore.RED}{total_profit}m")
             print("goodbye\n")
             break  # Exit the loop and end the program
 
