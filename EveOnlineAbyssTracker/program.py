@@ -2,7 +2,7 @@ from colorama import *
 import os
 
 #ToDO: 
-# Error catching for when wrong input
+# Error catching for when wrong input type
 # 
 # Transfer tracked info into text file
 
@@ -22,7 +22,12 @@ def menu():
 2. Exit
 
     Choice: {Fore.RED}"""
-        user_input = input(menu_text)
+        try:
+            user_input = input(menu_text)
+        except ValueError:
+            os.system('CLS')
+            print(f"\n{Fore.RED}Invalid choice. Please enter 1 or 2.")
+            
 
         if user_input == "1":
             os.system('CLS')
@@ -33,17 +38,30 @@ def menu():
             break  # Exit the loop and end the program
 
         else:
-            print(f"\n{Fore.YELLOW}Invalid choice. Please enter 1 or 2.")
+            os.system('CLS')
+            print(f"\n{Fore.RED}Invalid choice. Please enter 1 or 2.")
 
 def abyssMain():
-    global starting_inv, exit_program, abyssal_runs, total_profit,total_Time
-    
-    if starting_inv is None:
-        starting_inv = startingInven()  # Ask for starting_inv only if it's None
+    global starting_inv, exit_program, abyssal_runs, total_profit, total_Time
 
     while True:
-        after_inv = afterInven()
-        time_in_abyss = timeSpent()
+        try:
+            if starting_inv is None:
+                starting_inv = startingInven()  # Ask for starting_inv only if it's None
+        except ValueError:
+            os.system('CLS')
+            print(f"\n{Fore.RED}Invalid choice. Please enter a Float")
+            starting_inv = None
+            continue
+
+        try:
+            after_inv = afterInven()
+            time_in_abyss = timeSpent()
+        except ValueError:
+            os.system('CLS')
+            print(f"\n{Fore.RED}Invalid choice. Please enter a Float")
+            continue
+
         new_total = profitCalc(starting_inv, after_inv, time_in_abyss)
         starting_inv = new_total  # Update global starting_inv with new_total
         abyssal_runs += 1  # Increment the counter for each Abyssal run
