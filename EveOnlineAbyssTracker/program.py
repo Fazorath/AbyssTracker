@@ -1,10 +1,16 @@
 from colorama import *
 import os
 
+#ToDO: 
+# Error catching for when wrong input
+# measurement of time inside the abyss 
+# Transfer tracked info into text file
+
 starting_inv = None  # Global variable to store starting_inv
 total_profit = 0
 abyssal_runs = 0  # Counter for total Abyssals run
 exit_program = False  # Flag to indicate when to exit the main menu loop
+MAXTIME = 20.00
 
 def menu():
     global total_profit, exit_program
@@ -35,30 +41,34 @@ def abyssMain():
 
     while True:
         after_inv = afterInven()
-        new_total = profitCalc(starting_inv, after_inv)
+        timeIn = timeSpent()
+        new_total = profitCalc(starting_inv, after_inv, timeIn)
         starting_inv = new_total  # Update global starting_inv with new_total
         abyssal_runs += 1  # Increment the counter for each Abyssal run
         user_input = input(f"{Fore.GREEN}Track another Abyssal run? (Y/N): {Fore.RED}")
         os.system("CLS")
+        if user_input.upper() != "Y":
+            while True:
+                print(f"{Fore.YELLOW}Invalid input. Please enter Y or N.")
+                user_input = input(f"{Fore.GREEN}Track another Abyssal run? (Y/N): {Fore.RED}")
+                os.system("CLS")
+                if user_input.upper() == "N" or user_input.upper() == "Y":
+                    break  # Exit the loop if valid input is provided
         if user_input.upper() == "N":
             print(f"\n{Fore.GREEN}Total Profits: {Fore.RED}{total_profit}m")
-<<<<<<< HEAD
             print(f"{Fore.GREEN}Total Abyssals Run: {Fore.RED}{abyssal_runs}\n\n")
-=======
-            print(f"{Fore.GREEN}Total Abyssals Run: {Fore.RED}{abyssal_runs}\n")
->>>>>>> 0cd44cae49fa77e7eb26a935be58cf174af78650
             exit_program = True
             break  # Exit the loop to return to main menu
-        elif user_input.upper() != "Y":
-            print(f"{Fore.YELLOW}Invalid input. Please enter Y or N.")
 
-def profitCalc(starting_inv, after_inv):
+
+
+def profitCalc(starting_inv, after_inv, TimeinsideAbyss):
     global total_profit
     profit = after_inv - starting_inv
     new_total = starting_inv + profit
     total_profit += profit
 
-    profit_string = f"\n{Fore.GREEN}Profit: {Fore.RED}{profit} Million\n{Fore.GREEN}New total: {Fore.RED}{new_total}\n"
+    profit_string = f"\n{Fore.GREEN}Profit: {Fore.RED}{profit} Million\n{Fore.GREEN}New total: {Fore.RED}{new_total}\n{Fore.GREEN}Time inside Abyss: {Fore.RED}{TimeinsideAbyss}\n{Fore.GREEN}"
     print(profit_string)
     return new_total
 
@@ -69,6 +79,13 @@ def startingInven():
 def afterInven():
     after = float(input(f"{Fore.GREEN}Isk Total after Abyss: {Fore.RED}"))
     return after
+
+def timeSpent():
+    global MAXTIME
+    timeLeft = float(input(f"{Fore.GREEN}Time Left when leaving: {Fore.RED}"))
+    timeSpent = MAXTIME - timeLeft
+    return timeSpent
+
 
 if __name__ == "__main__":
     menu()
