@@ -3,6 +3,17 @@ import os
 from globals import *
 
 def abyssMain(startingIsk=None, abyssal_runs=0, total_Time=0):
+    """
+    Main function to track Abyssal runs and calculate profits.
+    
+    Args:
+        startingIsk (float, optional): Initial ISK before Abyssal run.
+        abyssal_runs (int): Number of Abyssal runs.
+        total_Time (float): Total time spent in Abyssal runs.
+
+    Returns:
+        tuple: Tuple containing updated `startingIsk`, `abyssal_runs`, and `total_Time`.
+    """
     global total_profit  # Use the global total_profit variable
 
     while True:
@@ -41,10 +52,21 @@ def abyssMain(startingIsk=None, abyssal_runs=0, total_Time=0):
                 
                 return startingIsk, abyssal_runs, total_Time  # Exit the function to return to the main menu
             else:
-                print(f"{Fore.YELLOW}Invalid input. Please enter 1 or 0.")
+                print(f"{Fore.YELLOW}Invalid input. Please enter 1 or 0.\n")
 
 
 def profitCalc(starting_inv, after_inv, TimeinsideAbyss):
+    """
+    Calculate profit from an Abyssal run.
+    
+    Args:
+        starting_inv (float): Initial ISK before Abyssal run.
+        after_inv (float): ISK after Abyssal run.
+        TimeinsideAbyss (float): Time spent in Abyssal run.
+
+    Returns:
+        float: Profit from the Abyssal run.
+    """
     global total_profit  # Use the global total_profit variable
     profit = after_inv - starting_inv
     new_total = starting_inv + profit
@@ -56,17 +78,55 @@ def profitCalc(starting_inv, after_inv, TimeinsideAbyss):
 
 
 def startingInven():
-    before = float(input(f"\n{Fore.GREEN}Isk Total before Abyss: {Fore.RED}"))
-    return before
+    """
+    Get the ISK total before an Abyssal run.
+    
+    Returns:
+        float: ISK total before Abyssal run.
+    """
+    while True:
+        try:
+            before = float(input(f"\n{Fore.GREEN}Isk Total before Abyss: {Fore.RED}"))
+        except ValueError:
+            os.system('CLS')
+            print("Invalid Choice please enter a Float")      
+            continue      
+        return before
 
 
 def afterInven():
-    after = float(input(f"{Fore.GREEN}Isk Total after Abyss: {Fore.RED}"))
-    return after
+    """
+    Get the ISK total after an Abyssal run.
+    
+    Returns:
+        float: ISK total after Abyssal run.
+    """
+    while True:
+        try:
+            after = float(input(f"{Fore.GREEN}Isk Total after Abyss: {Fore.RED}"))
+        except ValueError:
+            os.system('CLS')
+            print("Invalid Choice please enter a Float\n")
+            continue
+        return after
+        
 
 
 def timeSpent():
+    """
+    Get the time spent in an Abyssal run.
+    
+    Returns:
+        float: Time spent in Abyssal run.
+    """
     global MAXTIME
-    timeLeft = float(input(f"{Fore.GREEN}Time Left when leaving: {Fore.RED}"))
-    timeSpent = MAXTIME - timeLeft
-    return timeSpent
+    while True:
+        try:
+            timeLeft = float(input(f"{Fore.GREEN}Time Left when leaving: {Fore.RED}"))
+            timeSpent = MAXTIME - timeLeft
+        except ValueError:
+            os.system('CLS')
+            print("Invalid Choice please input a Float")
+            continue
+        return timeSpent
+            

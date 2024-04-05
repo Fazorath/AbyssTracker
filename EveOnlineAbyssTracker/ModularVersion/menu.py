@@ -14,6 +14,7 @@ def menu(startloop="False"):
         except ValueError:
             os.system('CLS')
             print(f"\n{Fore.RED}Invalid choice. Please enter 1 or 2.")
+            continue
             
 
         if user_input == "1":
