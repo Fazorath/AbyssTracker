@@ -6,6 +6,10 @@ import os
 # Consistent exception Handling
 # Function Naming
 # Getting rid of Global Variables
+#
+# input session details into text document
+# Refactor for no Global Variables
+
 
 starting_inv = None  # Global variable to store starting_inv
 total_profit = 0
