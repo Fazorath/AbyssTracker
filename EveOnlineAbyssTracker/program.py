@@ -73,12 +73,12 @@ def abyssMain():
         total_Time += time_in_abyss
 
         while True:
-            user_input = input(f"{Fore.GREEN}Track another Abyssal run? (Y/N): {Fore.RED}").upper()
+            user_input = input(f"{Fore.GREEN}Track another Abyssal run? (1/0): {Fore.RED}").upper()
             os.system("CLS")
 
-            if user_input == "Y":
+            if user_input == "1":
                 break  # Exit the inner loop to continue tracking another Abyssal run
-            elif user_input == "N":
+            elif user_input == "0":
                 print(f"\n{Fore.GREEN}Total Profits: {Fore.RED}{total_profit}m")
                 print(f"{Fore.GREEN}Total Abyssals Run: {Fore.RED}{abyssal_runs}\n")
                 print(f"{Fore.GREEN}Total Time Spent: {Fore.RED}{total_Time} Mins\n\n")
