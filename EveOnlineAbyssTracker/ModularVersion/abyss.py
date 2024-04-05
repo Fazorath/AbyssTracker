@@ -2,9 +2,7 @@ from colorama import Fore
 from globals import *
 import os
 
-def abyssMain(startingIsk=None):
-    global exit_program, abyssal_runs, total_profit, total_Time
-
+def abyssMain(startingIsk=None, abyssal_runs=0, total_profit=0, total_Time=0):
     while True:
         try:
             if startingIsk is None:
@@ -25,6 +23,7 @@ def abyssMain(startingIsk=None):
 
         new_total = profitCalc(startingIsk, after_inv, time_in_abyss)
         startingIsk = new_total  # Update global starting_inv with new_total
+        total_profit += startingIsk
         abyssal_runs += 1  # Increment the counter for each Abyssal run
         total_Time += time_in_abyss
 
@@ -35,13 +34,15 @@ def abyssMain(startingIsk=None):
             if user_input == "1":
                 break  # Exit the inner loop to continue tracking another Abyssal run
             elif user_input == "0":
-                print(f"\n{Fore.GREEN}Total Profit: {Fore.RED}{total_profit}m")
+                print(f"\n{Fore.GREEN}Total Profit: {Fore.RED}{total_profit}m")  # Use total_profit here
                 print(f"{Fore.GREEN}Total Abyssals Run: {Fore.RED}{abyssal_runs}\n")
                 print(f"{Fore.GREEN}Total Time Spent: {Fore.RED}{total_Time} Mins\n")
-                exit_program = True
-                return  # Exit the function to return to the main menu
+                
+                return startingIsk, abyssal_runs, total_Time  # Exit the function to return to the main menu
             else:
                 print(f"{Fore.YELLOW}Invalid input. Please enter Y or N.")
+
+
 
 def profitCalc(starting_inv, after_inv, TimeinsideAbyss):
     global total_profit
