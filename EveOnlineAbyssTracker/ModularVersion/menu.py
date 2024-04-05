@@ -1,21 +1,26 @@
 from colorama import Fore
 from globals import *
 import os
+from abyss import *
 
 def menu():
-    global total_profit, exit_program
-    while not exit_program:
+    global exit_program
+    while exit_program != True:
         menu_text = f"""{Fore.GREEN}Welcome to my EVE ONLINE Python projects.
 
 1. Abyss Money Tracker
 2. Exit
 
     Choice: {Fore.RED}"""
-        user_input = input(menu_text)
+        try:
+            user_input = input(menu_text)
+        except ValueError:
+            os.system('CLS')
+            print(f"\n{Fore.RED}Invalid choice. Please enter 1 or 2.")
+            
 
         if user_input == "1":
             os.system('CLS')
-            from abyss import abyssMain  # Importing abyssMain from abyss.py
             abyssMain()
 
         elif user_input == "2":
@@ -23,4 +28,5 @@ def menu():
             break  # Exit the loop and end the program
 
         else:
-            print(f"\n{Fore.YELLOW}Invalid choice. Please enter 1 or 2.")
+            os.system('CLS')
+            print(f"\n{Fore.RED}Invalid choice. Please enter 1 or 2.")
