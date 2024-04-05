@@ -2,17 +2,17 @@ from colorama import Fore
 from globals import *
 import os
 
-def abyssMain():
-    global starting_inv, exit_program, abyssal_runs, total_profit, total_Time
+def abyssMain(startingIsk=None):
+    global exit_program, abyssal_runs, total_profit, total_Time
 
     while True:
         try:
-            if starting_inv is None:
-                starting_inv = startingInven()  # Ask for starting_inv only if it's None
+            if startingIsk is None:
+                startingIsk = startingInven()  # Ask for starting_inv only if it's None
         except ValueError:
             os.system('CLS')
             print(f"\n{Fore.RED}Invalid choice. Please enter a Float")
-            starting_inv = None
+            startingIsk = None
             continue
 
         try:
@@ -23,8 +23,8 @@ def abyssMain():
             print(f"\n{Fore.RED}Invalid choice. Please enter a Float")
             continue
 
-        new_total = profitCalc(starting_inv, after_inv, time_in_abyss)
-        starting_inv = new_total  # Update global starting_inv with new_total
+        new_total = profitCalc(startingIsk, after_inv, time_in_abyss)
+        startingIsk = new_total  # Update global starting_inv with new_total
         abyssal_runs += 1  # Increment the counter for each Abyssal run
         total_Time += time_in_abyss
 

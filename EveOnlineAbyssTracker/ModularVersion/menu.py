@@ -3,9 +3,8 @@ from globals import *
 import os
 from abyss import *
 
-def menu():
-    global exit_program
-    while exit_program != True:
+def menu(startloop="False"):
+    while startloop != True:
         menu_text = f"""{Fore.GREEN}Welcome to my EVE ONLINE Python projects.
 
 1. Abyss Money Tracker
