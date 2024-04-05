@@ -2,9 +2,10 @@ from colorama import *
 import os
 
 #ToDO: 
-# Error catching for when wrong input type
-# 
-# Transfer tracked info into text file
+# More Error Inputs
+# Consistent exception Handling
+# Function Naming
+# Getting rid of Global Variables
 
 starting_inv = None  # Global variable to store starting_inv
 total_profit = 0
@@ -82,8 +83,6 @@ def abyssMain():
             else:
                 print(f"{Fore.YELLOW}Invalid input. Please enter Y or N.")
 
-
-
 def profitCalc(starting_inv, after_inv, TimeinsideAbyss):
     global total_profit
     profit = after_inv - starting_inv
@@ -107,7 +106,6 @@ def timeSpent():
     timeLeft = float(input(f"{Fore.GREEN}Time Left when leaving: {Fore.RED}"))
     timeSpent = MAXTIME - timeLeft
     return timeSpent
-
 
 if __name__ == "__main__":
     menu()
