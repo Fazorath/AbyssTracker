@@ -1,14 +1,12 @@
 from colorama import Fore
-from globals import *
 import os
 from abyss import *
 
 def menu(startloop="False"):
     while startloop != True:
-        menu_text = f"""{Fore.GREEN}Welcome to my EVE ONLINE Python projects.
+        menu_text = f"""{Fore.RED}Welcome to my EVE ONLINE Python projects.{Fore.GREEN}
 
 1. Abyss Money Tracker
-2. Exit
 
     Choice: {Fore.RED}"""
         try:
@@ -21,9 +19,10 @@ def menu(startloop="False"):
         if user_input == "1":
             os.system('CLS')
             abyssMain()
+            # startloop = True #This will fully end the loop after pressing to not track anymore abyss runs.
 
-        elif user_input == "2":
-            print("goodbye\n")
+        elif user_input.upper() == "Q":
+            print("\n    goodbye\n")
             break  # Exit the loop and end the program
 
         else:
