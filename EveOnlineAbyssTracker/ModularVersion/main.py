@@ -1,6 +1,6 @@
 from menu import menu
 
-#ToDO: 
+#ToDo: 
 # More Error Inputs - Finished
 # Consistent exception Handling 
 # Function Naming
