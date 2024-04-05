@@ -2,8 +2,9 @@ from menu import menu
 
 #ToDo: 
 # More Error Inputs - Finished
-# Consistent exception Handling 
-# Function Naming
+# Consistent exception Handling - Finished
+# Function Naming - Finished
+#
 # input session details into text document
 
 
