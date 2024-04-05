@@ -1,39 +1,6 @@
-from colorama import *
+from colorama import Fore
+from globals import *
 import os
-
-#ToDO: 
-# Error catching for when wrong input
-# 
-# Transfer tracked info into text file
-
-starting_inv = None  # Global variable to store starting_inv
-total_profit = 0
-abyssal_runs = 0  # Counter for total Abyssals run
-exit_program = False  # Flag to indicate when to exit the main menu loop
-total_Time = 0
-MAXTIME = 20.00
-
-def menu():
-    global total_profit, exit_program
-    while not exit_program:
-        menu_text = f"""{Fore.GREEN}Welcome to my EVE ONLINE Python projects.
-
-1. Abyss Money Tracker
-2. Exit
-
-    Choice: {Fore.RED}"""
-        user_input = input(menu_text)
-
-        if user_input == "1":
-            os.system('CLS')
-            abyssMain()
-
-        elif user_input == "2":
-            print("goodbye\n")
-            break  # Exit the loop and end the program
-
-        else:
-            print(f"\n{Fore.YELLOW}Invalid choice. Please enter 1 or 2.")
 
 def abyssMain():
     global starting_inv, exit_program, abyssal_runs, total_profit,total_Time
@@ -89,7 +56,3 @@ def timeSpent():
     timeLeft = float(input(f"{Fore.GREEN}Time Left when leaving: {Fore.RED}"))
     timeSpent = MAXTIME - timeLeft
     return timeSpent
-
-
-if __name__ == "__main__":
-    menu()
