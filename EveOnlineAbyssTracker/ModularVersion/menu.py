@@ -5,7 +5,15 @@ from abyss import *
 
 def menu(startloop="False"):
     while startloop != True:
-        menu_text = f"""{Fore.RED}Welcome to my EVE ONLINE Python projects.{Fore.GREEN}
+        menu_text = f"""{Fore.RED}
+            
+    |     '||                             |''||''|                         '||                      
+   |||     || ...  .... ...  ....   ....     ||    ... ..   ....     ....   ||  ..    ....  ... ..  
+  |  ||    ||'  ||  '|.  |  ||. '  ||. '     ||     ||' '' '' .||  .|   ''  || .'   .|...||  ||' '' 
+ .''''|.   ||    |   '|.|   . '|.. . '|..    ||     ||     .|' ||  ||       ||'|.   ||       ||     
+.|.  .||.  '|...'     '|    |'..|' |'..|'   .||.   .||.    '|..'|'  '|...' .||. ||.  '|...' .||.    
+                   .. |                                                                             
+                    ''                                                                              {Fore.GREEN}
 
 1. Abyss Money Tracker
 

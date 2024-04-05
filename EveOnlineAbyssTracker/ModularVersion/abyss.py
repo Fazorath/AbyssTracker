@@ -84,7 +84,7 @@ def profitCalc(starting_inv, after_inv, TimeinsideAbyss):
     total_profit += profit
 
     profit_string = f"\n{Fore.GREEN}Profit: {Fore.RED}{profit} Million\n{Fore.GREEN}New total: {
-        Fore.RED}{new_total}\n{Fore.GREEN}Time inside Abyss: {Fore.RED}{TimeinsideAbyss}\n{Fore.GREEN}"
+        Fore.RED}{new_total}\n{Fore.GREEN}Time inside Abyss: {Fore.RED}{TimeinsideAbyss} Mins\n{Fore.GREEN}"
     print(profit_string)
     return profit  # Return the profit for the current run
 
