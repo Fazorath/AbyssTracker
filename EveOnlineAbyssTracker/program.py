@@ -35,30 +35,32 @@ def menu():
             print(f"\n{Fore.YELLOW}Invalid choice. Please enter 1 or 2.")
 
 def abyssMain():
-    global starting_inv, exit_program, abyssal_runs  # Use the global variables
+    global starting_inv, exit_program, abyssal_runs, total_profit
+    
     if starting_inv is None:
         starting_inv = startingInven()  # Ask for starting_inv only if it's None
 
     while True:
         after_inv = afterInven()
-        timeIn = timeSpent()
-        new_total = profitCalc(starting_inv, after_inv, timeIn)
+        time_in_abyss = timeSpent()
+        new_total = profitCalc(starting_inv, after_inv, time_in_abyss)
         starting_inv = new_total  # Update global starting_inv with new_total
         abyssal_runs += 1  # Increment the counter for each Abyssal run
-        user_input = input(f"{Fore.GREEN}Track another Abyssal run? (Y/N): {Fore.RED}")
-        os.system("CLS")
-        if user_input.upper() != "Y":
-            while True:
+
+        while True:
+            user_input = input(f"{Fore.GREEN}Track another Abyssal run? (Y/N): {Fore.RED}").upper()
+            os.system("CLS")
+
+            if user_input == "Y":
+                break  # Exit the inner loop to continue tracking another Abyssal run
+            elif user_input == "N":
+                print(f"\n{Fore.GREEN}Total Profits: {Fore.RED}{total_profit}m")
+                print(f"{Fore.GREEN}Total Abyssals Run: {Fore.RED}{abyssal_runs}\n")
+                print(f"{Fore.GREEN}Total Time Spent: {Fore.RED}{time_in_abyss}\n\n")
+                exit_program = True
+                return  # Exit the function to return to the main menu
+            else:
                 print(f"{Fore.YELLOW}Invalid input. Please enter Y or N.")
-                user_input = input(f"{Fore.GREEN}Track another Abyssal run? (Y/N): {Fore.RED}")
-                os.system("CLS")
-                if user_input.upper() == "N" or user_input.upper() == "Y":
-                    break  # Exit the loop if valid input is provided
-        if user_input.upper() == "N":
-            print(f"\n{Fore.GREEN}Total Profits: {Fore.RED}{total_profit}m")
-            print(f"{Fore.GREEN}Total Abyssals Run: {Fore.RED}{abyssal_runs}\n\n")
-            exit_program = True
-            break  # Exit the loop to return to main menu
 
 
 
