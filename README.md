@@ -25,3 +25,6 @@ This project is licensed under the MIT License.
 
 Acknowledgements:
 This project was inspired by the need for an easy-to-use tool for tracking Abyssal run profits in EVE Online. Special thanks to the EVE Online community for their feedback and support.
+
+# Adding to File branch created to work on the functionality to add 
+# end of session reports to a text file for more advanced storage
