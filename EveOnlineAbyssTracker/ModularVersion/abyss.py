@@ -4,6 +4,7 @@ from globals import *
 
 
 def abyssMain(startingIsk=None, abyssal_runs=0, total_Time=0):
+    global title
     """
     Main function to track Abyssal runs and calculate profits.
 
@@ -47,6 +48,7 @@ def abyssMain(startingIsk=None, abyssal_runs=0, total_Time=0):
             os.system("CLS")
 
             if user_input == "1":
+                print(title)
                 break  # Exit the inner loop to continue tracking another Abyssal run
             elif user_input == "0":
                 print(
@@ -89,6 +91,7 @@ def profitCalc(starting_inv, after_inv, TimeinsideAbyss):
 
 
 def startingInven():
+    global title
     """
     Get the ISK total before an Abyssal run.
 
@@ -96,6 +99,7 @@ def startingInven():
         float: ISK total before Abyssal run.
     """
     while True:
+        print(title)
         try:
             before = float(
                 input(f"\n{Fore.GREEN}Isk Total before Abyss: {Fore.RED}"))
