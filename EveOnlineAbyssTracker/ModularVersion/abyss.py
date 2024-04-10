@@ -51,16 +51,25 @@ def abyssMain(startingIsk=None, abyssal_runs=0, total_Time=0):
                 print(title)
                 break  # Exit the inner loop to continue tracking another Abyssal run
             elif user_input == "0":
-                ## Here is where the outfile and written to text file code should be 
+                ## Here is where the outfile and written to text file code should be
                 ## After the user is finished with their session
                 ## Keep track of total total profit, runs, and time spent with a nice header that will say
                 ## the time of the entry.
-                with open ("Sessions.txt","a") as file:
-                    data = ["Session Details!"," ",f"Total Profit: {total_profit} Million",f"Total Abyssal runs: {abyssal_runs} Runs",f"Total Time: {total_Time} Min","-------------------"]
+                with open("Sessions.txt", "a") as file:
+                    data = [
+                        "Session Details!",
+                        " ",
+                        f"Total Profit: {total_profit} Million",
+                        f"Total Abyssal runs: {abyssal_runs} Runs",
+                        f"Total Time: {total_Time} Min",
+                        "-------------------",
+                    ]
                     for line in data:
-                        file.write(line+"\n")
-                print(f"\n{Fore.GREEN}Total Profit: {Fore.RED}{total_profit}m\n{Fore.GREEN}Total Abyssals Run: {Fore.RED}{abyssal_runs}\n{Fore.GREEN}Total Time Spent: {Fore.RED}{total_Time} Mins\nInformation Written to Text File")  # Use total_profit here
-    
+                        file.write(line + "\n")
+                print(
+                    f"\n{Fore.GREEN}Total Profit: {Fore.RED}{total_profit}m\n{Fore.GREEN}Total Abyssals Run: {Fore.RED}{abyssal_runs}\n{Fore.GREEN}Total Time Spent: {Fore.RED}{total_Time} Mins\nInformation Written to Text File"
+                )  # Use total_profit here
+
                 return (
                     startingIsk,
                     abyssal_runs,
@@ -87,7 +96,7 @@ def profitCalc(starting_inv, after_inv, TimeinsideAbyss):
     new_total = starting_inv + profit
     total_profit += profit
 
-    profit_string = (f"\n{Fore.GREEN}Profit: {Fore.RED}{profit} Million\n{Fore.GREEN}New total: {Fore.RED}{new_total}\n{Fore.GREEN}Time inside Abyss: {Fore.RED}{TimeinsideAbyss} Mins\n{Fore.GREEN}")
+    profit_string = f"\n{Fore.GREEN}Profit: {Fore.RED}{profit} Million\n{Fore.GREEN}New total: {Fore.RED}{new_total}\n{Fore.GREEN}Time inside Abyss: {Fore.RED}{TimeinsideAbyss} Mins\n{Fore.GREEN}"
     print(profit_string)
     return profit  # Return the profit for the current run
 
@@ -103,8 +112,7 @@ def startingInven():
     while True:
         print(title)
         try:
-            before = float(
-                input(f"\n{Fore.GREEN}Isk Total before Abyss: {Fore.RED}"))
+            before = float(input(f"\n{Fore.GREEN}Isk Total before Abyss: {Fore.RED}"))
         except ValueError:
             os.system("CLS")
             print("Invalid Choice please enter a Float")
@@ -121,8 +129,7 @@ def afterInven():
     """
     while True:
         try:
-            after = float(
-                input(f"{Fore.GREEN}Isk Total after Abyss: {Fore.RED}"))
+            after = float(input(f"{Fore.GREEN}Isk Total after Abyss: {Fore.RED}"))
         except ValueError:
             os.system("CLS")
             print("Invalid Choice please enter a Float\n")
@@ -140,8 +147,7 @@ def timeSpent():
     global MAXTIME
     while True:
         try:
-            timeLeft = float(
-                input(f"{Fore.GREEN}Time Left when leaving: {Fore.RED}"))
+            timeLeft = float(input(f"{Fore.GREEN}Time Left when leaving: {Fore.RED}"))
             timeSpent = MAXTIME - timeLeft
         except ValueError:
             os.system("CLS")

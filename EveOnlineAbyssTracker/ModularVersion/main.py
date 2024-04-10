@@ -1,6 +1,6 @@
 from menu import menu
 
-#ToDo: 
+# ToDo:
 # More Error Inputs - Finished
 # Consistent exception Handling - Finished
 # Function Naming - Finished
@@ -10,4 +10,3 @@ from menu import menu
 
 if __name__ == "__main__":
     menu()
-
