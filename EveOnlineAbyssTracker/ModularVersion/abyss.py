@@ -51,14 +51,16 @@ def abyssMain(startingIsk=None, abyssal_runs=0, total_Time=0):
                 print(title)
                 break  # Exit the inner loop to continue tracking another Abyssal run
             elif user_input == "0":
-                print(
-                    f"\n{Fore.GREEN}Total Profit: {Fore.RED}{total_profit}m"
-                )  # Use total_profit here
-                print(f"{Fore.GREEN}Total Abyssals Run: {
-                      Fore.RED}{abyssal_runs}")
-                print(f"{Fore.GREEN}Total Time Spent: {
-                      Fore.RED}{total_Time} Mins\n")
-
+                ## Here is where the outfile and written to text file code should be 
+                ## After the user is finished with their session
+                ## Keep track of total total profit, runs, and time spent with a nice header that will say
+                ## the time of the entry.
+                with open ("Sessions.txt","a") as file:
+                    data = ["Session Details!"," ",f"Total Profit: {total_profit} Million",f"Total Abyssal runs: {abyssal_runs} Runs",f"Total Time: {total_Time} Min","-------------------"]
+                    for line in data:
+                        file.write(line+"\n")
+                print(f"\n{Fore.GREEN}Total Profit: {Fore.RED}{total_profit}m\n{Fore.GREEN}Total Abyssals Run: {Fore.RED}{abyssal_runs}\n{Fore.GREEN}Total Time Spent: {Fore.RED}{total_Time} Mins\nInformation Written to Text File")  # Use total_profit here
+    
                 return (
                     startingIsk,
                     abyssal_runs,
