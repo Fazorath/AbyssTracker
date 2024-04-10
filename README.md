@@ -26,8 +26,12 @@ This project is licensed under the MIT License.
 Acknowledgements:
 This project was inspired by the need for an easy-to-use tool for tracking Abyssal run profits in EVE Online. Special thanks to the EVE Online community for their feedback and support.
 
-# 4/9/24 Updated some title printing and global variables
 
 # 4/5/24 TextFile Functionality
 Adding to File branch created to work on the functionality to add 
 end of session reports to a text file for more advanced storage
+
+# 4/10/2024
+implemented adding the session details to a txt file at the end to keep long term
+track of profits and time spent. + getting the hang of using branches to work on specific info and then
+pulling to main.
