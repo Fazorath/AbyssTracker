@@ -51,6 +51,10 @@ def abyssMain(startingIsk=None, abyssal_runs=0, total_Time=0):
                 print(title)
                 break  # Exit the inner loop to continue tracking another Abyssal run
             elif user_input == "0":
+                ## Here is where the outfile and written to text file code should be 
+                ## After the user is finished with their session
+                ## Keep track of total total profit, runs, and time spent with a nice header that will say
+                ## the time of the entry.
                 print(
                     f"\n{Fore.GREEN}Total Profit: {Fore.RED}{total_profit}m"
                 )  # Use total_profit here
