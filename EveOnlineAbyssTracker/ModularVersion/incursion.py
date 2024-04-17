@@ -1,15 +1,21 @@
-from colorama import *
+from colorama import Fore
 import time
 import os
 from globals import *
 
-profit = 0
 
 
 def incursion():
     global title
     print(title)
-    IncursionProfit = int(input(f"{Fore.GREEN}Profit per incursion: {Fore.RED}"))
+    while True:
+        try:
+            IncursionProfit = int(input(f"{Fore.GREEN}Profit per incursion: {Fore.RED}"))
+            break  # Break out of the loop if input is successful
+        except ValueError:
+            os.system("CLS")
+            print(title)
+            print("Please enter a valid integer for profit per incursion.")
     while True:
         if not Menu(IncursionProfit):
             break
@@ -17,19 +23,25 @@ def incursion():
 
 def Menu(profitPerRun):
     while True:
-        running = input(f"{Fore.GREEN}Still running (Y/N): {Fore.RED}")
-        if running.upper() == "Y":
-            runningIncursion(profitPerRun)
-        elif running.upper() == "N":
-            notRunning()
-            return False  # Return False to indicate the function should exit
-        else:
-            print("Invalid input. Press Y if running again, or N if done.")
-            return True  # Return True if the user is still running
+        try:
+            running = input(f"{Fore.GREEN}Still running (Y/N): {Fore.RED}")
+            if running.upper() == "Y":
+                runningIncursion(profitPerRun)
+            elif running.upper() == "N":
+                notRunning()
+                return False  # Return False to indicate the function should exit
+            else:
+                os.system("CLS")
+                print("Invalid input. Press Y if running again, or N if done.")
+                return True  # Return True if the user is still running
+        except ValueError:
+            os.system("CLS")
+            print(Fore.RED + f"{title}")
+            print("Please enter a valid integer for time.")  # Prompt for valid input
+            continue
 
-
-def runningIncursion(profitPerRun, incProfit=0, incursiontime=0):
-    global title
+def runningIncursion(profitPerRun):
+    global title, incProfit, incursiontime
     while True:
         os.system("CLS")  # Clear the screen
         incProfit += profitPerRun
@@ -38,11 +50,11 @@ def runningIncursion(profitPerRun, incProfit=0, incursiontime=0):
             try:
                 finishTime = int(input(f"{Fore.GREEN}Time to Finish: {Fore.RED}"))
                 incursiontime += finishTime
-                print(f"{Fore.GREEN}Profit Recorded")
+                print("Profit Recorded")
                 time.sleep(2)
                 os.system("CLS")  # Clear the screen
                 print(Fore.RED + f"{title}")
-                return incProfit, incursiontime  # Return the updated values
+                return  # Return without any value
             except ValueError:
                 os.system('CLS')
                 print(Fore.RED + f"{title}")
@@ -50,6 +62,7 @@ def runningIncursion(profitPerRun, incProfit=0, incursiontime=0):
                 continue
 
 def notRunning():
+    global incursiontime, incProfit
     os.system("CLS")
     print(f"{Fore.GREEN}Total Profit: {Fore.RED}{incProfit} Million")
     print(f"{Fore.GREEN}Total Time: {Fore.RED}{incursiontime} Mins")
