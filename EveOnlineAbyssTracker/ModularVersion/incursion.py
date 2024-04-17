@@ -5,16 +5,20 @@ from globals import *
 profit = 0 
 
 def incursion():
+    IncursionProfit=int(input("Profit per incursion: "))
     while True:
-        IncursionProfit=input("Profit per incursion: ")
-        runningIncursion()
+        runningIncursion(IncursionProfit)
 
-def runningIncursion():
-    running = input("Still running: ")
+def runningIncursion(profitPerRun):
+    global incProfit
     while True:
+        running = input("Still running: ")
         if running.upper() == "Y":
             print("Profit Recorded")
+            incProfit += profitPerRun
+            print(incProfit)
             time=input("Time to Finish: ")
+            break
         elif running.upper() == "N":
             print("okay Shitter")
             break
