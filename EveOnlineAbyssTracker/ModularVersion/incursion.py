@@ -3,30 +3,33 @@ import time
 import os
 from globals import *
 
-
-
 def incursion():
     global title
     print(title)
+    
+    # Get the profit per incursion and time to finish
+    profitPerIncursion = getProfitPerIncursion()
+    timePerIncursion = getTimePerIncursion()
+
+    # Loop the menu until the user is done
     while True:
-        try:
-            IncursionProfit = int(input(f"{Fore.GREEN}Profit per incursion: {Fore.RED}"))
-            break  # Break out of the loop if input is successful
-        except ValueError:
-            os.system("CLS")
-            print(title)
-            print("Please enter a valid integer for profit per incursion.")
-    while True:
-        if not Menu(IncursionProfit):
+        if not runMenu(profitPerIncursion, timePerIncursion):
             break
 
 
-def Menu(profitPerRun):
+
+def runMenu(profitPerIncursion, timePerIncursion):
+    global title, incProfit, incursiontime
     while True:
         try:
             running = input(f"{Fore.GREEN}Still running (Y/N): {Fore.RED}")
             if running.upper() == "Y":
-                runningIncursion(profitPerRun)
+                os.system("CLS")  # Clear the screen
+                incProfit += profitPerIncursion
+                incursiontime += timePerIncursion
+                print(Fore.RED + f"{title}")
+                print("Profit Recorded")
+                time.sleep(2)
             elif running.upper() == "N":
                 notRunning()
                 return False  # Return False to indicate the function should exit
@@ -37,29 +40,30 @@ def Menu(profitPerRun):
         except ValueError:
             os.system("CLS")
             print(Fore.RED + f"{title}")
-            print("Please enter a valid integer for time.")  # Prompt for valid input
+            print("Please enter a valid input.")  # Prompt for valid input
             continue
-
-def runningIncursion(profitPerRun):
-    global title, incProfit, incursiontime
+        
+def getProfitPerIncursion():
+    global title
     while True:
-        os.system("CLS")  # Clear the screen
-        incProfit += profitPerRun
-        print(Fore.RED + f"{title}")
-        while True:
-            try:
-                finishTime = int(input(f"{Fore.GREEN}Time to Finish: {Fore.RED}"))
-                incursiontime += finishTime
-                print("Profit Recorded")
-                time.sleep(2)
-                os.system("CLS")  # Clear the screen
-                print(Fore.RED + f"{title}")
-                return  # Return without any value
-            except ValueError:
-                os.system('CLS')
-                print(Fore.RED + f"{title}")
-                print("Please enter a valid integer for time.")  # Prompt for valid input
-                continue
+        try:
+            profitPerIncursion = int(input(f"{Fore.GREEN}Profit per incursion: {Fore.RED}"))
+            return profitPerIncursion
+        except ValueError:
+            os.system("CLS")
+            print(title)
+            print("Please enter a valid integer for profit per incursion.")
+
+def getTimePerIncursion():
+    global title
+    while True:
+        try:
+            timePerIncursion = int(input(f"{Fore.GREEN}Time per incursion: {Fore.RED}"))
+            return timePerIncursion
+        except ValueError:
+            os.system("CLS")
+            print(title)
+            print("Please enter a valid integer for time per incursion.")
 
 def notRunning():
     global incursiontime, incProfit
