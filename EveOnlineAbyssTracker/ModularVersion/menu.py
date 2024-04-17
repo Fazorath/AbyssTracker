@@ -1,6 +1,7 @@
 from colorama import Fore
 import os
 from abyss import *
+from incursion import *
 
 
 def menu(startloop="False"):
@@ -16,7 +17,7 @@ def menu(startloop="False"):
                     ''                                                                              {Fore.GREEN}
 
 1. Abyss Money Tracker
-
+2. Incursion Tracker
     Choice: {Fore.RED}"""
         try:
             user_input = input(menu_text)
@@ -29,6 +30,10 @@ def menu(startloop="False"):
             os.system("CLS")
             abyssMain()
             # startloop = True #This will fully end the loop after pressing to not track anymore abyss runs.
+        
+        elif user_input == "2":
+            os.system("CLS")
+            incursion()
 
         elif user_input.upper() == "Q":
             print("\n    goodbye\n")
