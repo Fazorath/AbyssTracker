@@ -2,27 +2,27 @@ from colorama import *
 import os
 from globals import *
 
-profit = 0 
+profit = 0
 
 def incursion():
-    IncursionProfit=int(input("Profit per incursion: "))
+    IncursionProfit = int(input("Profit per incursion: "))
     while True:
-        runningIncursion(IncursionProfit)
+        if not runningIncursion(IncursionProfit):
+            break
 
 def runningIncursion(profitPerRun):
     global incProfit
     while True:
-        running = input("Still running: ")
+        running = input("Still running (Y/N): ")
         if running.upper() == "Y":
-            print("Profit Recorded")
             incProfit += profitPerRun
             print(incProfit)
-            time=input("Time to Finish: ")
-            break
+            time = input("Time to Finish: ")
+            print("Profit Recorded")
+            break  # Break out of the inner loop
         elif running.upper() == "N":
-            print("okay Shitter")
-            break
+            print("Exiting incursion.")
+            return False  # Return False to indicate the function should exit
         else:
-            print("Press Y if running again\nPress N if done")
-            break
-
+            print("Invalid input. Press Y if running again, or N if done.")
+    return True  # Return True if the user is still running
