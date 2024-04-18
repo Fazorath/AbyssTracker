@@ -1,4 +1,6 @@
 total_profit = 0
+incProfit = 0
+incursiontime = 0
 MAXTIME = 20.00
 title = """
             
