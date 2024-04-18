@@ -38,11 +38,11 @@ To run this program, you need to have Python installed on your system. You can d
 
    ```bash
    git clone https://github.com/your-username/abyss-incursion-tracker.git
-   '''
-   
 
+2. Navigate to the project directory:
 
-
+  ```bash
+  cd abyss-incursion-tracker
 
 # Todo:
 - Function to average out profits hourly in both the abyss and incursion functions
