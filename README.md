@@ -37,7 +37,7 @@ To run this program, you need to have Python installed on your system. You can d
 1. Clone the repository to your local machine:
 
    ```bash
-   git clone https://github.com/your-username/abyss-incursion-tracker.git
+   git clone https://github.com/your-username/abyss-incursion-tracker.git'''
 
 
 
