@@ -47,7 +47,7 @@ To run this program, you need to have Python installed on your system. You can d
    ```bash
    pip install -r requirements.txt
 
-##Usage
+## Usage
 To use the Abyssal and Incursion Tracker, follow the instructions below:
 
 Abyssal Money Tracker
