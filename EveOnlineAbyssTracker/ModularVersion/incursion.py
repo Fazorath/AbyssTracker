@@ -10,8 +10,6 @@ def incursion():
     # Get the profit per incursion
     profitPerIncursion = getProfitPerIncursion()
     
-    # Get the time per incursion
-
     # Loop the menu until the user is done
     while True:
         if not runMenu(profitPerIncursion):
@@ -31,6 +29,7 @@ def runMenu(profitPerIncursion):
             if running.upper() == "Y":
                 os.system("CLS")  # Clear the screen
                 print(Fore.RED + f"{title}")
+                
                 incursiontime += getTimePerIncursion()
                 incProfit += profitPerIncursion
                 print("Profit Recorded")
