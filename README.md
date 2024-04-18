@@ -27,7 +27,8 @@ Acknowledgements:
 This project was inspired by the need for an easy-to-use tool for tracking Abyssal run profits in EVE Online. Special thanks to the EVE Online community for their feedback and support.
 
 # Todo:
-Function to average out profits hourly in both the abyss and incursion functions
+- Function to average out profits hourly in both the abyss and incursion functions
+- error input for the incursion Module
 
 # 4/5/24 TextFile Functionality
 Adding to File branch created to work on the functionality to add 
