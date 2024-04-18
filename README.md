@@ -1,30 +1,46 @@
-Project Name: Abyssal Run Tracker
+# Abyssal and Incursion Tracker
 
-Description:
-The Abyssal Run Tracker is a Python program designed to help EVE Online players track their profits and statistics from Abyssal runs. It provides a simple and user-friendly interface for entering starting ISK, ending ISK, and time spent in the Abyss. The program calculates the profit from each run and keeps a running total of profits, number of runs, and total time spent in the Abyss.
+This program is designed to help users track their profits and time spent during Abyssal runs and Incursions in a massively multiplayer online role-playing game (MMORPG). It provides a user-friendly interface for inputting relevant data and automatically calculates profits based on initial and final ISK amounts and time spent in each activity.
 
-Key Features:
+## Table of Contents
 
-Input starting and ending ISK for each Abyssal run.
-Track the time spent in each Abyssal run.
-Calculates and displays the profit from each run.
-Keeps a running total of profits, number of runs, and total time spent in the Abyss.
-Error handling for invalid inputs to ensure smooth operation.
-How to Use:
+- [Features](#features)
+- [Getting Started](#getting-started)
+  - [Prerequisites](#prerequisites)
+  - [Installation](#installation)
+- [Usage](#usage)
+  - [Abyssal Money Tracker](#abyssal-money-tracker)
+  - [Incursion Tracker](#incursion-tracker)
+- [Contributing](#contributing)
+- [License](#license)
 
-Run the program and follow the prompts.
-Enter the starting ISK, ending ISK, and time spent for each Abyssal run.
-The program will calculate the profit for each run and display it.
-After each run, choose to track another Abyssal run or exit.
-The program will display the total profit, number of runs, and total time spent when finished.
-Contributing:
-Contributions are welcome! If you find bugs or have suggestions for improvements, feel free to create an issue or submit a pull request on GitHub.
+## Features
 
-License:
-This project is licensed under the MIT License.
+**Abyssal Money Tracker:**
+  - Input starting ISK, ending ISK, and time spent to calculate profit for each Abyssal run.
+  - Automatically keeps track of total profits, number of runs, and total time spent.
+  - Allows users to track multiple Abyssal runs and provides an option to stop tracking when finished.
 
-Acknowledgements:
-This project was inspired by the need for an easy-to-use tool for tracking Abyssal run profits in EVE Online. Special thanks to the EVE Online community for their feedback and support.
+**Incursion Tracker:**
+  - Similar to Abyssal Money Tracker, but tailored for tracking Incursions.
+  - Users can input profit per incursion and time spent per incursion.
+  - Provides an option to track multiple incursions and stops when the user chooses to finish.
+
+## Getting Started
+
+### Prerequisites
+
+To run this program, you need to have Python installed on your system. You can download and install Python from the official website: [python.org](https://www.python.org/).
+
+### Installation
+
+1. Clone the repository to your local machine:
+
+   ```bash
+   git clone https://github.com/your-username/abyss-incursion-tracker.git
+
+
+
 
 # Todo:
 - Function to average out profits hourly in both the abyss and incursion functions
