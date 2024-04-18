@@ -28,7 +28,8 @@ This project was inspired by the need for an easy-to-use tool for tracking Abyss
 
 # Todo:
 - Function to average out profits hourly in both the abyss and incursion functions
-- error input for the incursion Module
+- error input for the Incursion Module
+- add session details into file for Incursion Module
 
 # 4/5/24 TextFile Functionality
 Adding to File branch created to work on the functionality to add 
