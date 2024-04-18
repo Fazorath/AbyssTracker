@@ -5,29 +5,34 @@ from globals import *
 
 def incursion():
     global title
-    print(title)
-    
-    # Get the profit per incursion and time to finish
+    print(Fore.RED + f"{title}")
+
+    # Get the profit per incursion
     profitPerIncursion = getProfitPerIncursion()
-    timePerIncursion = getTimePerIncursion()
+    
+    # Get the time per incursion
 
     # Loop the menu until the user is done
     while True:
-        if not runMenu(profitPerIncursion, timePerIncursion):
+        if not runMenu(profitPerIncursion):
             break
 
-
-
-def runMenu(profitPerIncursion, timePerIncursion):
+def runMenu(profitPerIncursion):
     global title, incProfit, incursiontime
+    os.system("CLS") 
+    print(Fore.RED + f"{title}")
+    incProfit += profitPerIncursion
+    incursiontime += getTimePerIncursion()
+    print("Profit Recorded")
+    time.sleep(2)
     while True:
         try:
             running = input(f"{Fore.GREEN}Still running (Y/N): {Fore.RED}")
             if running.upper() == "Y":
                 os.system("CLS")  # Clear the screen
-                incProfit += profitPerIncursion
-                incursiontime += timePerIncursion
                 print(Fore.RED + f"{title}")
+                incursiontime += getTimePerIncursion()
+                incProfit += profitPerIncursion
                 print("Profit Recorded")
                 time.sleep(2)
             elif running.upper() == "N":
