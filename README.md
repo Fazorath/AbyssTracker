@@ -43,24 +43,49 @@ To run this program, you need to have Python installed on your system. You can d
    ```bash
    cd abyss-incursion-tracker
 
+3. Install the required dependencies:
+   ```bash
+   pip install -r requirements.txt
 
+##Usage
+To use the Abyssal and Incursion Tracker, follow the instructions below:
 
+Abyssal Money Tracker
+1. Run the program:
+    ```bash
+    python main.py
+2. Select option 1 to track Abyssal runs.
+3. Enter the starting ISK amount, ending ISK amount, and time spent for each Abyssal run.
+4. Choose whether to track another Abyssal run (1 for Yes, 0 for No).
+5. Once finished, the program will write session details to a text file (Sessions.txt) and display total profits, runs, and time spent.
+##Incursion Tracker
+1. Run the program:
+    ```bash
+    python main.py
+2. Select option 2 to track Incursions.
+3. Enter the profit per incursion and time spent per incursion.
+4. Follow the same steps as the Abyssal Money Tracker to track multiple incursions.
+##Contributing
+Contributions are welcome! If you find any bugs or have suggestions for improvements, please open an issue or submit a pull request.
+
+License
+This project is licensed under the MIT License - see the LICENSE file for details.
 # Todo:
 - Function to average out profits hourly in both the abyss and incursion functions
 - error input for the Incursion Module
-- add session details into file for Incursion Module
+- add session details into a file for Incursion Module
 
 # 4/5/24 TextFile Functionality
 Adding to File branch created to work on the functionality to add 
 end of session reports to a text file for more advanced storage
 
 # 4/10/2024
-implemented adding the session details to a txt file at the end to keep long term
-track of profits and time spent. + getting the hang of using branches to work on specific info and then
-pulling to main.
+implemented adding the session details to a Txt file at the end to keep long-term
+track of profits and time spent. + Getting the hang of using branches to work on specific info and then
+pulling to the main.
 
 # 4/18/2024 
 Got back into doing incursion with a cool group of people in WTM
-i now have an abyssal tracker that promps for profit which should always remain a stable 31m 
-and then asks for time. I am going to focus now on making a average tracker at the end of the session that shows up to tell you how 
+I now have an abyssal tracker that prompt for profit which should always remain a stable 31m 
+and then asks for time. I am going to focus now on making an average tracker at the end of the session that shows up to tell you how 
 much you made per hour.
