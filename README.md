@@ -59,7 +59,7 @@ Abyssal Money Tracker
 4. Choose whether to track another Abyssal run (1 for Yes, 0 for No).
 5. Once finished, the program will write session details to a text file (Sessions.txt) and display total profits, runs, and time spent.
 
-##Incursion Tracker
+## Incursion Tracker
 1. Run the program:
     ```bash
     python main.py
@@ -67,7 +67,7 @@ Abyssal Money Tracker
 3. Enter the profit per incursion and time spent per incursion.
 4. Follow the same steps as the Abyssal Money Tracker to track multiple incursions.
 
-##Contributing
+## Contributing
 Contributions are welcome! If you find any bugs or have suggestions for improvements, please open an issue or submit a pull request.
 
 License
