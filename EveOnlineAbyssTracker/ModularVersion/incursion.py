@@ -35,6 +35,7 @@ def runMenu(profitPerIncursion):
                 print("Profit Recorded")
                 time.sleep(2)
             elif running.upper() == "N":
+                writeToFile()
                 notRunning()
                 return False  # Return False to indicate the function should exit
             else:
@@ -74,4 +75,19 @@ def notRunning():
     os.system("CLS")
     print(f"{Fore.GREEN}Total Profit: {Fore.RED}{incProfit} Million")
     print(f"{Fore.GREEN}Total Time: {Fore.RED}{incursiontime} Mins")
-    print(f"{Fore.GREEN}Exiting incursion.")
+    print(f"{Fore.GREEN}Incursion Abondoned - {Fore.RED}Information written to Text File")
+
+def writeToFile():
+    global incProfit, incursiontime
+    with open("Sessions.txt","a") as file:
+                    data = [
+                        "Session Details!",
+                        " ",
+                        f"Incursions with WTM !",
+                        f"Total Profit: {incProfit} Million",
+                        f"Total Time: {incursiontime} Min",
+                        "-------------------",
+                    ]
+                    for line in data:
+                        file.write(line + "\n")
+                        
