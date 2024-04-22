@@ -50,23 +50,9 @@ def abyssMain(startingIsk=None, abyssal_runs=0, total_Time=0):
                 print(title)
                 break  # Exit the inner loop to continue tracking another Abyssal run
             elif user_input == "0":
-                ## Here is where the outfile and written to text file code should be
-                ## After the user is finished with their session
-                ## Keep track of total total profit, runs, and time spent with a nice header that will say
-                ## the time of the entry.
-                with open("Sessions.txt", "a") as file:
-                    data = [
-                        "Abyss Details!",
-                        " ",
-                        f"Total Profit: {total_profit} Million",
-                        f"Total Abyssal runs: {abyssal_runs} Runs",
-                        f"Total Time: {total_Time} Min",
-                        "-------------------",
-                    ]
-                    for line in data:
-                        file.write(line + "\n")
+                writetoFile(abyssal_runs,total_Time)
                 print(
-                    f"\n{Fore.GREEN}Total Profit: {Fore.RED}{total_profit}m\n{Fore.GREEN}Total Abyssals Run: {Fore.RED}{abyssal_runs}\n{Fore.GREEN}Total Time Spent: {Fore.RED}{total_Time} Mins\nInformation Written to Text File"
+                    f"\n{Fore.GREEN}Total Profit: {Fore.RED}{total_profit} Million\n{Fore.GREEN}Total Abyssals Run: {Fore.RED}{abyssal_runs}\n{Fore.GREEN}Total Time Spent: {Fore.RED}{total_Time} Mins\nInformation Written to Text File"
                 )  # Use total_profit here
 
                 return (
@@ -77,6 +63,26 @@ def abyssMain(startingIsk=None, abyssal_runs=0, total_Time=0):
             else:
                 print(f"{Fore.YELLOW}Invalid input. Please enter 1 or 0.\n")
 
+def writetoFile(abyssRuns,AbyssTime):
+    """
+    Writes to existing file the stats from the abyss session
+    
+    Args:
+        abyssRuns(int): Total amount of runs
+        abyssTime(int): Total amount of Time
+    """
+    global total_profit
+    with open("Sessions.txt", "a") as file:
+                    data = [
+                        "Abyss Details!",
+                        " ",
+                        f"Total Profit: {total_profit} Million",
+                        f"Total Abyssal runs: {abyssRuns} Runs",
+                        f"Total Time: {AbyssTime} Min",
+                        "-------------------",
+                    ]
+                    for line in data:
+                        file.write(line + "\n")
 
 def profitCalc(starting_inv, after_inv, TimeinsideAbyss):
     """
