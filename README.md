@@ -4,15 +4,20 @@ This program is designed to help users track their profits and time spent during
 
 ## Table of Contents
 
-- [Features](#features)
-- [Getting Started](#getting-started)
-  - [Prerequisites](#prerequisites)
-  - [Installation](#installation)
-- [Usage](#usage)
-  - [Abyssal Money Tracker](#abyssal-money-tracker)
+- [Abyssal and Incursion Tracker](#abyssal-and-incursion-tracker)
+  - [Table of Contents](#table-of-contents)
+  - [Features](#features)
+  - [Getting Started](#getting-started)
+    - [Prerequisites](#prerequisites)
+    - [Installation](#installation)
+  - [Usage](#usage)
   - [Incursion Tracker](#incursion-tracker)
-- [Contributing](#contributing)
-- [License](#license)
+  - [Contributing](#contributing)
+- [Todo:](#todo)
+- [4/5/24 TextFile Functionality](#4524-textfile-functionality)
+- [4/10/2024](#4102024)
+- [4/18/2024](#4182024)
+- [4/21/24](#42124)
 
 ## Features
 
@@ -91,3 +96,7 @@ Got back into doing incursion with a cool group of people in WTM
 I now have an abyssal tracker that prompt for profit which should always remain a stable 31m 
 and then asks for time. I am going to focus now on making an average tracker at the end of the session that shows up to tell you how 
 much you made per hour.
+
+# 4/21/24
+Incursion modules Try again prompt has been updated to use 0 and 1 aswell as added
+a incursions ran counter like in the abyss module to keep track.
