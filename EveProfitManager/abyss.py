@@ -4,7 +4,7 @@ from globals import *
 
 
 def abyssMain(startingIsk=None, abyssal_runs=0, total_Time=0):
-    global title
+    global title, total_profit
     """
     Main function to track Abyssal runs and calculate profits.
 
@@ -16,7 +16,6 @@ def abyssMain(startingIsk=None, abyssal_runs=0, total_Time=0):
     Returns:
         tuple: Tuple containing updated `startingIsk`, `abyssal_runs`, and `total_Time`.
     """
-    global total_profit  # Use the global total_profit variable
 
     while True:
         try:

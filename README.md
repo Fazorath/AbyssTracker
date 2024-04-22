@@ -79,8 +79,12 @@ License
 This project is licensed under the MIT License - see the LICENSE file for details.
 # Todo:
 - Function to average out profits hourly in both the abyss and incursion functions
+  - Ran into issues with this because the time is being processed by user input in minutes. Have to find 
+  - out to turn the minutes into the appropriate hour conversion and then we can begin on this.
 - ~~error input for the Incursion Module~~
-- add session details into file for Incursion Module
+- ~~add session details into file for Incursion Module~~
+- Update incursion module to limit use of Globals and start using parameters
+- Write to file function for abyss module instead of inside Run Function for aesthetics
 
 # 4/5/24 TextFile Functionality
 Adding to File branch created to work on the functionality to add 
