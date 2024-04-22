@@ -27,8 +27,8 @@ def runMenu(profitPerIncursion):
     amountRun += 1
     while True:
         try:
-            running = input(f"{Fore.GREEN}Still running (1/0): {Fore.RED}")
-            if running.upper() == "1":
+            running = int(input(f"{Fore.GREEN}Still running (1/0): {Fore.RED}"))
+            if running == 1:
                 os.system("CLS")  # Clear the screen
                 print(Fore.RED + f"{title}")
                 
@@ -37,14 +37,13 @@ def runMenu(profitPerIncursion):
                 amountRun += 1
                 print("Profit Recorded")
                 time.sleep(2)
-            elif running.upper() == "0":
+            elif running == 0:
                 writeToFile(amountRun)
                 notRunning()
                 return False  # Return False to indicate the function should exit
             else:
                 os.system("CLS")
                 print("Invalid input. Press 1 if running again, or 0 if done.")
-                return True  # Return True if the user is still running
         except ValueError:
             os.system("CLS")
             print(Fore.RED + f"{title}")
