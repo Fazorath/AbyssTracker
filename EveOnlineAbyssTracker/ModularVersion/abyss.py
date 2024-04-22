@@ -57,7 +57,7 @@ def abyssMain(startingIsk=None, abyssal_runs=0, total_Time=0):
                 ## the time of the entry.
                 with open("Sessions.txt", "a") as file:
                     data = [
-                        "Session Details!",
+                        "Abyss Details!",
                         " ",
                         f"Total Profit: {total_profit} Million",
                         f"Total Abyssal runs: {abyssal_runs} Runs",

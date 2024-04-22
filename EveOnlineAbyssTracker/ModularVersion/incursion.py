@@ -17,30 +17,33 @@ def incursion():
 
 def runMenu(profitPerIncursion):
     global title, incProfit, incursiontime
+    amountRun = 0
     os.system("CLS") 
     print(Fore.RED + f"{title}")
     incProfit += profitPerIncursion
     incursiontime += getTimePerIncursion()
     print("Profit Recorded")
     time.sleep(2)
+    amountRun += 1
     while True:
         try:
-            running = input(f"{Fore.GREEN}Still running (Y/N): {Fore.RED}")
-            if running.upper() == "Y":
+            running = input(f"{Fore.GREEN}Still running (1/0): {Fore.RED}")
+            if running.upper() == "1":
                 os.system("CLS")  # Clear the screen
                 print(Fore.RED + f"{title}")
                 
                 incursiontime += getTimePerIncursion()
                 incProfit += profitPerIncursion
+                amountRun += 1
                 print("Profit Recorded")
                 time.sleep(2)
-            elif running.upper() == "N":
-                writeToFile()
+            elif running.upper() == "0":
+                writeToFile(amountRun)
                 notRunning()
                 return False  # Return False to indicate the function should exit
             else:
                 os.system("CLS")
-                print("Invalid input. Press Y if running again, or N if done.")
+                print("Invalid input. Press 1 if running again, or 0 if done.")
                 return True  # Return True if the user is still running
         except ValueError:
             os.system("CLS")
@@ -77,14 +80,14 @@ def notRunning():
     print(f"{Fore.GREEN}Total Time: {Fore.RED}{incursiontime} Mins")
     print(f"{Fore.GREEN}Incursion Abondoned - {Fore.RED}Information written to Text File")
 
-def writeToFile():
+def writeToFile(incursionsRun):
     global incProfit, incursiontime
     with open("Sessions.txt","a") as file:
                     data = [
-                        "Session Details!",
+                        "Incursion Details!",
                         " ",
-                        f"Incursions with WTM !",
                         f"Total Profit: {incProfit} Million",
+                        f"Total Incursions Ran: {incursionsRun} Sites",
                         f"Total Time: {incursiontime} Min",
                         "-------------------",
                     ]
