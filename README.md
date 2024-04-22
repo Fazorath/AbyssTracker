@@ -90,17 +90,17 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 Adding to File branch created to work on the functionality to add 
 end of session reports to a text file for more advanced storage
 
-# 4/10/2024
+# 4/10/24
 implemented adding the session details to a Txt file at the end to keep long-term
 track of profits and time spent. + Getting the hang of using branches to work on specific info and then
 pulling to the main.
 
-# 4/18/2024 
+# 4/18/24 
 Got back into doing incursion with a cool group of people in WTM
-I now have an abyssal tracker that prompt for profit which should always remain a stable 31m 
+I now have an abyssal tracker that prompts for profit which should always remain a stable 31m 
 and then asks for time. I am going to focus now on making an average tracker at the end of the session that shows up to tell you how 
 much you made per hour.
 
 # 4/21/24
-Incursion modules Try again prompt has been updated to use 0 and 1 aswell as added
-a incursions ran counter like in the abyss module to keep track.
+Incursion modules Try again prompt has been updated to use 0 and 1 as well as added
+an incursion ran counter like in the abyss module to keep track.
