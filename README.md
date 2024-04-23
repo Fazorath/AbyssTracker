@@ -15,8 +15,8 @@ This program is designed to help users track their profits and time spent during
   - [Contributing](#contributing)
 - [Todo:](#todo)
 - [4/5/24 TextFile Functionality](#4524-textfile-functionality)
-- [4/10/2024](#4102024)
-- [4/18/2024](#4182024)
+- [4/10/24](#4102024)
+- [4/18/24](#4182024)
 - [4/21/24](#42124)
 
 ## Features
@@ -83,7 +83,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
   - out to turn the minutes into the appropriate hour conversion and then we can begin on this.
 2. ~~error input for the Incursion Module~~
 3. ~~add session details into file for Incursion Module~~
-4. Update incursion module to limit use of Globals and start using parameters
+4. ~~Update incursion module to limit use of Globals and start using parameters~~
 5. ~~Write to file function for abyss module instead of inside Run Function for aesthetics and proper code~~
 
 # 4/5/24 TextFile Functionality

@@ -15,13 +15,12 @@ def incursion():
         if not runMenu(profitPerIncursion):
             break
 
-def runMenu(profitPerIncursion):
-    global title, incProfit, incursiontime
+def runMenu(profitPerIncursion,incProf=0,incTime=0):
     amountRun = 0
     os.system("CLS") 
     print(Fore.RED + f"{title}")
-    incProfit += profitPerIncursion
-    incursiontime += getTimePerIncursion()
+    incProf += profitPerIncursion
+    incTime += getTimePerIncursion()
     print("Profit Recorded")
     time.sleep(2)
     amountRun += 1
@@ -32,14 +31,14 @@ def runMenu(profitPerIncursion):
                 os.system("CLS")  # Clear the screen
                 print(Fore.RED + f"{title}")
                 
-                incursiontime += getTimePerIncursion()
-                incProfit += profitPerIncursion
+                incTime += getTimePerIncursion()
+                incProf += profitPerIncursion
                 amountRun += 1
                 print("Profit Recorded")
                 time.sleep(2)
             elif running == 0:
-                writeToFile(amountRun)
-                notRunning()
+                writeToFile(incProf,amountRun,incTime)
+                notRunning(incProf,incTime)
                 return False  # Return False to indicate the function should exit
             else:
                 os.system("CLS")
@@ -72,15 +71,13 @@ def getTimePerIncursion():
             print(title)
             print("Please enter a valid integer for time per incursion.")
 
-def notRunning():
-    global incursiontime, incProfit
+def notRunning(incProfit,incursiontime,):
     os.system("CLS")
     print(f"{Fore.GREEN}Total Profit: {Fore.RED}{incProfit} Million")
     print(f"{Fore.GREEN}Total Time: {Fore.RED}{incursiontime} Mins")
     print(f"{Fore.GREEN}Incursion Abondoned - {Fore.RED}Information written to Text File")
 
-def writeToFile(incursionsRun):
-    global incProfit, incursiontime
+def writeToFile(incProfit,incursionsRun,incursiontime):
     with open("Sessions.txt","a") as file:
                     data = [
                         "Incursion Details!",
