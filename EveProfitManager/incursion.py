@@ -4,6 +4,9 @@ import os
 from globals import *
 
 def incursion():
+    """
+    Main function to manage the incursion process.
+    """
     global title
     print(Fore.RED + f"{title}")
 
@@ -15,7 +18,15 @@ def incursion():
         if not runMenu(profitPerIncursion):
             break
 
-def runMenu(profitPerIncursion,incProf=0,incTime=0):
+def runMenu(profitPerIncursion, incProf=0, incTime=0):
+    """
+    Function to run the menu for each incursion.
+
+    Parameters:
+    - profitPerIncursion: The profit gained per incursion.
+    - incProf: Total profit gained in the current incursion.
+    - incTime: Total time spent in the current incursion.
+    """
     amountRun = 0
     os.system("CLS") 
     print(Fore.RED + f"{title}")
@@ -37,8 +48,8 @@ def runMenu(profitPerIncursion,incProf=0,incTime=0):
                 print("Profit Recorded")
                 time.sleep(2)
             elif running == 0:
-                writeToFile(incProf,amountRun,incTime)
-                notRunning(incProf,incTime)
+                writeToFile(incProf, amountRun, incTime)
+                notRunning(incProf, incTime)
                 return False  # Return False to indicate the function should exit
             else:
                 os.system("CLS")
@@ -50,6 +61,12 @@ def runMenu(profitPerIncursion,incProf=0,incTime=0):
             continue
         
 def getProfitPerIncursion():
+    """
+    Function to get the profit gained per incursion from the user.
+
+    Returns:
+    - profitPerIncursion: The profit gained per incursion.
+    """
     global title
     while True:
         try:
@@ -61,6 +78,12 @@ def getProfitPerIncursion():
             print("Please enter a valid integer for profit per incursion.")
 
 def getTimePerIncursion():
+    """
+    Function to get the time spent per incursion from the user.
+
+    Returns:
+    - timePerIncursion: The time spent per incursion.
+    """
     global title
     while True:
         try:
@@ -71,22 +94,36 @@ def getTimePerIncursion():
             print(title)
             print("Please enter a valid integer for time per incursion.")
 
-def notRunning(incProfit,incursiontime,):
+def notRunning(incProfit, incursiontime):
+    """
+    Function to handle the case when the incursion is not running.
+
+    Parameters:
+    - incProfit: Total profit gained in the incursion.
+    - incursiontime: Total time spent in the incursion.
+    """
     os.system("CLS")
     print(f"{Fore.GREEN}Total Profit: {Fore.RED}{incProfit} Million")
     print(f"{Fore.GREEN}Total Time: {Fore.RED}{incursiontime} Mins")
-    print(f"{Fore.GREEN}Incursion Abondoned - {Fore.RED}Information written to Text File")
+    print(f"{Fore.GREEN}Incursion Abandoned - {Fore.RED}Information written to Text File")
 
-def writeToFile(incProfit,incursionsRun,incursiontime):
-    with open("Sessions.txt","a") as file:
-                    data = [
-                        "Incursion Details!",
-                        " ",
-                        f"Total Profit: {incProfit} Million",
-                        f"Total Incursions Ran: {incursionsRun} Sites",
-                        f"Total Time: {incursiontime} Min",
-                        "-------------------",
-                    ]
-                    for line in data:
-                        file.write(line + "\n")
-                        
+def writeToFile(incProfit, incursionsRun, incursiontime):
+    """
+    Function to write incursion details to a text file.
+
+    Parameters:
+    - incProfit: Total profit gained in the incursion.
+    - incursionsRun: Total number of incursions run.
+    - incursiontime: Total time spent in the incursion.
+    """
+    with open("Sessions.txt", "a") as file:
+        data = [
+            "Incursion Details!",
+            " ",
+            f"Total Profit: {incProfit} Million",
+            f"Total Incursions Ran: {incursionsRun} Sites",
+            f"Total Time: {incursiontime} Min",
+            "-------------------",
+        ]
+        for line in data:
+            file.write(line + "\n")
