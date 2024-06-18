@@ -1,6 +1,7 @@
 from colorama import Fore
 import os
 from globals import *
+from datetime import datetime  
 
 
 def abyssMain(startingIsk=None, abyssal_runs=0, total_Time=0):
@@ -48,6 +49,7 @@ def abyssMain(startingIsk=None, abyssal_runs=0, total_Time=0):
 
             if user_input == "1":
                 print(title)
+                print(f"\n{Fore.GREEN}Last Total: {Fore.RED}{startingIsk} Million\n")
                 break  # Exit the inner loop to continue tracking another Abyssal run
             elif user_input == "0":
                 writetoFile(abyssal_runs,total_Time)
@@ -72,6 +74,7 @@ def writetoFile(abyssRuns,AbyssTime):
         abyssTime(int): Total amount of Time
     """
     global total_profit
+    time = datetime.now()
     with open("Sessions.txt", "a") as file:
                     data = [
                         "Abyss Details!",
@@ -79,6 +82,7 @@ def writetoFile(abyssRuns,AbyssTime):
                         f"Total Profit: {total_profit} Million",
                         f"Total Abyssal runs: {abyssRuns} Runs",
                         f"Total Time: {AbyssTime} Min",
+                        f"Date: {time.strftime('%m-%d-%Y %I:%M %p')}",
                         "-------------------",
                     ]
                     for line in data:
