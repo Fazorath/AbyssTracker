@@ -12,3 +12,21 @@ Total Abyssal runs: 1 Runs
 Total Time: 19.0 Min
 Date: 06-17-2024 11:54 PM
 -------------------
+Abyss Details!
+ 
+Starting ISK: 30.0 Million
+After ISK: 60.0 Million
+Profit: 30.0 Million
+Time inside Abyss: 15.0 Mins
+Total Profit: 30.0 Million
+Date: 07-01-2024 07:00 PM
+-------------------
+Abyss Details!
+ 
+Starting ISK: 60.0 Million
+After ISK: 90.0 Million
+Profit: 30.0 Million
+Time inside Abyss: 18.0 Mins
+Total Profit: 30.0 Million
+Date: 07-01-2024 07:03 PM
+-------------------
