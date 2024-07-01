@@ -1,21 +1,102 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <title>{{ title }}</title>
-  </head>
-  <body>
-    <h1>{{ title }}</h1>
-    <form method="post">
-      <label for="startingIsk">ISK Total before Abyss:</label>
-      <input type="text" id="startingIsk" name="startingIsk" required><br>
-
-      <label for="after_inv">ISK Total after Abyss:</label>
-      <input type="text" id="after_inv" name="after_inv" required><br>
-
-      <label for="timeLeft">Time Left when leaving:</label>
-      <input type="text" id="timeLeft" name="timeLeft" required><br>
-
-      <input type="submit" value="Submit">
-    </form>
-  </body>
+<head>
+    <title>{{ title }} - Track Abyssal Run</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin-top: 50px;
+            background-color: #f0f0f0;
+        }
+        .container {
+            display: inline-block;
+            padding: 20px;
+            border-radius: 10px;
+            background-color: white;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+            width: 80%;
+            max-width: 500px;
+            margin-top: 50px;
+        }
+        h1 {
+            color: #007BFF;
+            margin-bottom: 20px;
+        }
+        .input-group {
+            margin-bottom: 15px;
+            text-align: left;
+        }
+        .input-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #333;
+        }
+        .input-group input {
+            width: 100%;
+            padding: 10px;
+            font-size: 16px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            box-sizing: border-box;
+        }
+        .input-group input:focus {
+            border-color: #007BFF;
+            outline: none;
+        }
+        .button {
+            display: inline-block;
+            padding: 10px 20px;
+            font-size: 18px;
+            color: white;
+            background-color: #007BFF;
+            border: none;
+            border-radius: 5px;
+            text-decoration: none;
+            margin-top: 20px;
+            transition: background-color 0.3s;
+        }
+        .button:hover {
+            background-color: #0056b3;
+        }
+        .error {
+            color: red;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>{{ title }} - Track Abyssal Run</h1>
+        <form method="POST">
+            <div class="input-group">
+                <label for="startingIsk">ISK Total Before Abyss:</label>
+                <input type="text" id="startingIsk" name="startingIsk" value="{{ startingIsk }}" required>
+            </div>
+            <div class="input-group">
+                <label for="after_inv">ISK Total After Abyss:</label>
+                <input type="text" id="after_inv" name="after_inv" required>
+            </div>
+            <div class="input-group">
+                <label for="timeLeft">Time Left When Leaving (Minutes):</label>
+                <input type="text" id="timeLeft" name="timeLeft" required>
+            </div>
+            <button type="submit" class="button">Submit</button>
+        </form>
+        {% if error %}
+            <div class="error">{{ error }}</div>
+        {% endif %}
+        {% if show_prompt %}
+            <form method="POST" action="{{ url_for('track_abyss') }}">
+                <input type="hidden" name="continue" value="yes">
+                <button type="submit" class="button">Track Another Abyssal Run</button>
+            </form>
+            <form method="POST" action="{{ url_for('track_abyss') }}">
+                <input type="hidden" name="continue" value="no">
+                <button type="submit" class="button">Finish and See Results</button>
+            </form>
+        {% endif %}
+    </div>
+</body>
 </html>

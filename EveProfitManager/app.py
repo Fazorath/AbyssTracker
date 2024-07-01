@@ -1,12 +1,12 @@
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, render_template, request, redirect, url_for, session
 from datetime import datetime
 import os
-import time
 
 app = Flask(__name__)
+app.secret_key = 'your_secret_key'  # Required for session management
 
 # Global variables
-title = "Abyss Tracker"
+title = "Tracker"
 total_profit = 0
 MAXTIME = 20  # Example max time
 
@@ -16,59 +16,103 @@ def index():
 
 @app.route('/abyss', methods=['GET', 'POST'])
 def track_abyss():
-    global total_profit
     if request.method == 'POST':
-        try:
-            startingIsk = float(request.form.get('startingIsk'))
-            after_inv = float(request.form.get('after_inv'))
-            timeLeft = float(request.form.get('timeLeft'))
-            time_in_abyss = MAXTIME - timeLeft
+        continue_tracking = request.form.get('continue')
+        if continue_tracking:
+            if continue_tracking == 'yes':
+                # Continue tracking Abyssal Runs
+                startingIsk = float(request.form.get('startingIsk'))
+                after_inv = float(request.form.get('after_inv'))
+                timeLeft = float(request.form.get('timeLeft'))
+                time_in_abyss = MAXTIME - timeLeft
 
-            profit = profitCalc(startingIsk, after_inv, time_in_abyss)
-            writetoFile(startingIsk, after_inv, time_in_abyss, profit)
+                profit = profitCalc(startingIsk, after_inv, time_in_abyss)
+                session['startingIsk'] = startingIsk + profit  # Update with the new starting ISK
+                session['abyssal_runs'] = session.get('abyssal_runs', 0) + 1
+                session['total_Time'] = session.get('total_Time', 0) + time_in_abyss
 
-            return redirect(url_for('index'))
-        except ValueError:
-            return "Invalid input. Please enter numeric values."
+                # Redirect to the same page to continue tracking
+                return redirect(url_for('track_abyss', title=title))
+            elif continue_tracking == 'no':
+                # Write to file and show results
+                writetoFile(session['abyssal_runs'], session['total_Time'])
+                session.pop('startingIsk', None)
+                session.pop('abyssal_runs', None)
+                session.pop('total_Time', None)
+                return render_template('results.html', title=title, total_profit=total_profit)
+        else:
+            try:
+                startingIsk = float(request.form.get('startingIsk'))
+                after_inv = float(request.form.get('after_inv'))
+                timeLeft = float(request.form.get('timeLeft'))
+                time_in_abyss = MAXTIME - timeLeft
 
-    return render_template('track.html', title=title)
+                profit = profitCalc(startingIsk, after_inv, time_in_abyss)
+                session['startingIsk'] = startingIsk + profit  # Update with the new starting ISK
+                session['abyssal_runs'] = session.get('abyssal_runs', 0) + 1
+                session['total_Time'] = session.get('total_Time', 0) + time_in_abyss
+
+                # Show prompt for the user to continue or finish
+                return render_template('track.html', title=title, startingIsk=startingIsk, show_prompt=True)
+            except ValueError:
+                return render_template('track.html', title=title, error="Invalid input. Please enter numeric values.")
+    else:
+        # Initialize the session variables for tracking Abyssal Runs
+        session['startingIsk'] = None
+        session['abyssal_runs'] = 0
+        session['total_Time'] = 0
+        return render_template('track.html', title=title)
+
 
 @app.route('/incursion', methods=['GET', 'POST'])
 def incursion():
     if request.method == 'POST':
-        profitPerIncursion = int(request.form.get('profitPerIncursion'))
-        return redirect(url_for('run_menu', profitPerIncursion=profitPerIncursion))
+        try:
+            profitPerIncursion = int(request.form.get('profitPerIncursion'))
+            session['profitPerIncursion'] = profitPerIncursion
+            session['incProf'] = 0
+            session['incTime'] = 0
+            session['amountRun'] = 0
+            return redirect(url_for('run_menu'))
+        except ValueError:
+            return "Invalid input. Please enter a valid integer for profit per incursion."
+
     return render_template('incursion.html', title="Incursion Tracker")
 
-@app.route('/run_menu/<int:profitPerIncursion>', methods=['GET', 'POST'])
-def run_menu(profitPerIncursion):
+@app.route('/run_menu', methods=['GET', 'POST'])
+def run_menu():
+    profitPerIncursion = session.get('profitPerIncursion')
+    incProf = session.get('incProf', 0)
+    incTime = session.get('incTime', 0)
+    amountRun = session.get('amountRun', 0)
+
     if request.method == 'POST':
-        running = int(request.form.get('running'))
-        incProf = int(request.form.get('incProf'))
-        incTime = int(request.form.get('incTime'))
-        amountRun = int(request.form.get('amountRun'))
+        try:
+            running = int(request.form.get('running'))
 
-        if running == 1:
-            incTime += getTimePerIncursion()
-            incProf += profitPerIncursion
-            amountRun += 1
-            time.sleep(2)
-        elif running == 0:
-            writeToFile(incProf, amountRun, incTime)
-            notRunning(incProf, incTime)
-            return redirect(url_for('index'))
+            if running == 1:
+                timePerIncursion = int(request.form.get('timePerIncursion'))
+                incTime += timePerIncursion
+                incProf += profitPerIncursion
+                amountRun += 1
+                session['incTime'] = incTime
+                session['incProf'] = incProf
+                session['amountRun'] = amountRun
+            elif running == 0:
+                writeToFile(incProf, amountRun, incTime)
+                return redirect(url_for('index'))
+            else:
+                return "Invalid input. Press 1 if running again, or 0 if done."
+        except ValueError:
+            return "Please enter a valid input."
 
-    return render_template('run_menu.html', title="Incursion Tracker", profitPerIncursion=profitPerIncursion)
+    return render_template('run_menu.html', title="Incursion Tracker", profitPerIncursion=profitPerIncursion, incProf=incProf, incTime=incTime, amountRun=amountRun)
 
 def profitCalc(starting_inv, after_inv, TimeinsideAbyss):
-    global total_profit
     profit = after_inv - starting_inv
-    total_profit += profit
-
     return profit
 
 def writetoFile(startingIsk, after_inv, time_in_abyss, profit):
-    global total_profit
     time = datetime.now()
     with open("Sessions.txt", "a") as file:
         data = [
@@ -78,18 +122,11 @@ def writetoFile(startingIsk, after_inv, time_in_abyss, profit):
             f"After ISK: {after_inv} Million",
             f"Profit: {profit} Million",
             f"Time inside Abyss: {time_in_abyss} Mins",
-            f"Total Profit: {total_profit} Million",
             f"Date: {time.strftime('%m-%d-%Y %I:%M %p')}",
             "-------------------",
         ]
         for line in data:
             file.write(line + "\n")
-
-def notRunning(incProfit, incursiontime):
-    os.system("CLS")
-    print(f"Total Profit: {incProfit} Million")
-    print(f"Total Time: {incursiontime} Mins")
-    print("Incursion Abandoned - Information written to Text File")
 
 def writeToFile(incProfit, incursionsRun, incursiontime):
     with open("Sessions.txt", "a") as file:
@@ -103,17 +140,6 @@ def writeToFile(incProfit, incursionsRun, incursiontime):
         ]
         for line in data:
             file.write(line + "\n")
-
-def getTimePerIncursion():
-    global title
-    while True:
-        try:
-            timePerIncursion = int(input(f"Time per incursion: "))
-            return timePerIncursion
-        except ValueError:
-            os.system("CLS")
-            print(title)
-            print("Please enter a valid integer for time per incursion.")
 
 if __name__ == '__main__':
     app.run(debug=True)

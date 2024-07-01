@@ -60,3 +60,11 @@ Total Profit: 31 Million
 Total Incursions Ran: 10 Sites
 Total Time: 7 Min
 -------------------
+Abyss Details!
+ 
+Starting ISK: 20.0 Million
+After ISK: 30.0 Million
+Profit: 10.0 Million
+Time inside Abyss: 16.0 Mins
+Date: 07-01-2024 07:14 PM
+-------------------
