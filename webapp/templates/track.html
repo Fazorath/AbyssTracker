@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>{{ title }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>{{ title }}</h1>
+
+        {% if results %}
+            <p>Starting ISK: {{ startingIsk }}</p>
+            <p>Profit: {{ profit }}</p>
+            <p>New Starting ISK: {{ newStartingIsk }}</p>
+            <p>Time Spent: {{ time_in_abyss }} Minutes</p>
+
+            <form method="post" action="{{ url_for('track_abyss') }}">
+                <input type="hidden" name="continue" value="yes">
+                <button type="submit">Track Another Abyssal Run</button>
+            </form>
+
+            <form method="post" action="{{ url_for('track_abyss') }}">
+                <input type="hidden" name="continue" value="no">
+                <button type="submit">Finish and See Results</button>
+            </form>
+        {% else %}
+            <form method="post">
+                <div class="input-group">
+                    <label for="startingIsk">ISK Total before Abyss:</label>
+                    <input type="text" id="startingIsk" name="startingIsk" required>
+                </div>
+                <div class="input-group">
+                    <label for="after_inv">ISK Total after Abyss:</label>
+                    <input type="text" id="after_inv" name="after_inv" required>
+                </div>
+                <div class="input-group">
+                    <label for="timeLeft">Time Left when leaving:</label>
+                    <input type="text" id="timeLeft" name="timeLeft" required>
+                </div>
+                <button type="submit">Submit Abyssal Run</button>
+            </form>
+        {% endif %}
+        {% if error %}
+            <p class="error">{{ error }}</p>
+        {% endif %}
+    </div>
+</body>
+</html>

@@ -68,3 +68,8 @@ Profit: 10.0 Million
 Time inside Abyss: 16.0 Mins
 Date: 07-01-2024 07:14 PM
 -------------------
+Abyssal Details:
+Total Profit: 250.0 Million
+Total Abyssal Runs: 2 Runs
+Total Time: 112.0 Minutes
+-------------------
