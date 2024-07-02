@@ -1,19 +1,69 @@
 <!doctype html>
 <html lang="en">
 <head>
-    <meta charset="utf-8">
-    <title>{{ title }}</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <title>{{ title }} - Abyssal Run Results</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin-top: 50px;
+            background-color: #f0f0f0;
+        }
+        .container {
+            display: inline-block;
+            padding: 20px;
+            border-radius: 10px;
+            background-color: white;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+            width: 80%;
+            max-width: 600px;
+            margin-top: 50px;
+        }
+        h1 {
+            color: #007BFF;
+            margin-bottom: 20px;
+        }
+        .result {
+            font-size: 18px;
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .button {
+            display: inline-block;
+            padding: 10px 20px;
+            font-size: 18px;
+            color: white;
+            background-color: #007BFF;
+            border: none;
+            border-radius: 5px;
+            text-decoration: none;
+            margin-top: 20px;
+            transition: background-color 0.3s;
+        }
+        .button:hover {
+            background-color: #0056b3;
+        }
+        .error {
+            color: red;
+            margin-top: 10px;
+        }
+    </style>
 </head>
 <body>
     <div class="container">
         <h1>{{ title }}</h1>
-        <p>Starting ISK: {{ startingIsk }}</p>
-        <p>Total Profit: {{ total_profit }}</p>
-        <p>Total Abyssal Runs: {{ abyssal_runs }}</p>
-        <p>Total Time Spent: {{ total_Time }} Minutes</p>
-        <p>Information Written to Text File</p>
-        <a href="{{ url_for('index') }}">Return to Home Page</a>
+        {% if error %}
+            <div class="error">{{ error }}</div>
+        {% else %}
+            <div class="result">
+                <p>Initial ISK: {{ startingIsk }} Million</p>
+                <p>Total Profit: {{ total_profit }} Million</p>
+                <p>Total Abyssal Runs: {{ abyssal_runs }} Runs</p>
+                <p>Total Time: {{ total_Time }} Minutes</p>
+                <p>Information Written to TextFile</p>
+            </div>
+        {% endif %}
+        <a href="{{ url_for('index') }}" class="button">Back to Home</a>
     </div>
 </body>
 </html>
