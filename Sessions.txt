@@ -169,3 +169,39 @@ Total Abyssal Runs: 2 Runs
 Total Time: 25.0 Minutes
 Timestamp: 07-02-2024 15:53:35
 -------------------
+Abyssal Details:
+Total Profit: 50.00 Million
+Total Abyssal Runs: 1 Runs
+Total Time: 12.0 Minutes
+Timestamp: 07-02-2024 16:13:35
+-------------------
+Abyssal Details:
+Total Profit: -120.00 Million
+Total Abyssal Runs: 1 Runs
+Total Time: 15.0 Minutes
+Timestamp: 07-02-2024 16:14:28
+-------------------
+Abyssal Details:
+Total Profit: 200.00 Million
+Total Abyssal Runs: 4 Runs
+Total Time: 60.0 Minutes
+Timestamp: 07-02-2024 16:17:06
+-------------------
+Abyssal Details:
+Total Profit: 100.00 Million
+Total Abyssal Runs: 1 Runs
+Total Time: 14.0 Minutes
+Timestamp: 07-02-2024 16:19:22
+-------------------
+Abyssal Details:
+Total Profit: 300.00 Million
+Total Abyssal Runs: 2 Runs
+Total Time: 29.0 Minutes
+Timestamp: 07-02-2024 16:20:20
+-------------------
+Abyssal Details:
+Total Profit: 200.00 Million
+Total Abyssal Runs: 1 Runs
+Total Time: 15.0 Minutes
+Timestamp: 07-02-2024 16:21:35
+-------------------
