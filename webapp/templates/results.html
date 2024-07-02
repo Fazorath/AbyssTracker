@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>{{ title }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>{{ title }}</h1>
+        <p>Starting ISK: {{ startingIsk }}</p>
+        <p>Total Profit: {{ total_profit }}</p>
+        <p>Total Abyssal Runs: {{ abyssal_runs }}</p>
+        <p>Total Time Spent: {{ total_Time }} Minutes</p>
+        <p>Information Written to Text File</p>
+        <a href="{{ url_for('index') }}">Return to Home Page</a>
+    </div>
+</body>
+</html>

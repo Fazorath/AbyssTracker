@@ -73,3 +73,53 @@ Total Profit: 250.0 Million
 Total Abyssal Runs: 2 Runs
 Total Time: 112.0 Minutes
 -------------------
+Abyssal Details:
+Total Profit: 750.0 Million
+Total Abyssal Runs: 2 Runs
+Total Time: 30.0 Minutes
+-------------------
+Abyssal Details:
+Total Profit: 750.0 Million
+Total Abyssal Runs: 3 Runs
+Total Time: 44.0 Minutes
+-------------------
+Abyssal Details:
+Total Profit: 300.0 Million
+Total Abyssal Runs: 1 Runs
+Total Time: 15.0 Minutes
+-------------------
+Abyssal Details:
+Total Profit: 300.0 Million
+Total Abyssal Runs: 1 Runs
+Total Time: 18.0 Minutes
+-------------------
+Abyssal Details:
+Total Profit: 600.0 Million
+Total Abyssal Runs: 3 Runs
+Total Time: 48.0 Minutes
+-------------------
+Abyssal Details:
+Total Profit: 100.0 Million
+Total Abyssal Runs: 2 Runs
+Total Time: 30.0 Minutes
+-------------------
+Abyssal Details:
+Total Profit: 0.0 Million
+Total Abyssal Runs: 0 Runs
+Total Time: 0 Minutes
+-------------------
+Abyssal Details:
+Total Profit: 125.0 Million
+Total Abyssal Runs: 1 Runs
+Total Time: 15.0 Minutes
+-------------------
+Abyssal Details:
+Total Profit: 150.0 Million
+Total Abyssal Runs: 1 Runs
+Total Time: 15.0 Minutes
+-------------------
+Abyssal Details:
+Total Profit: 150.0 Million
+Total Abyssal Runs: 3 Runs
+Total Time: 45.0 Minutes
+-------------------

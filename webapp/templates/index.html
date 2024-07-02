@@ -8,8 +8,10 @@
 <body>
     <div class="container">
         <h1>{{ title }}</h1>
-        <a href="{{ url_for('track_abyss') }}" class="button">Track Abyssal Runs</a>
-        <a href="#" class="button">Track Incursions (Coming Soon)</a>
+        <div class="button-container">
+            <a href="{{ url_for('track_abyss') }}" class="button">Abyss Tracking</a>
+            <a href="{{ url_for('track_abyss') }}" class="button">Incursion Tracking</a>
+        </div>
     </div>
 </body>
 </html>
