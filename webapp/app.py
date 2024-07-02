@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, session
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                import datetime
 
 app = Flask(__name__)
 app.secret_key = 'supersecretkey'  # Use a secure key in production
@@ -113,6 +114,7 @@ def writetoFile(abyssal_runs, total_Time, total_profit):
         f.write(f'Total Profit: {total_profit:.2f} Million\n')  # Ensure total_profit is formatted correctly
         f.write(f'Total Abyssal Runs: {abyssal_runs} Runs\n')
         f.write(f'Total Time: {total_Time} Minutes\n')
+        f.write('Timestamp: {:%m-%d-%Y %H:%M:%S\n}'.format(datetime.datetime.now()))
         f.write(f'-------------------\n')
 
 
