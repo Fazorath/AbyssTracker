@@ -863,6 +863,15 @@ class App(ctk.CTk):
         self.refresh()
         active = next((k for k in ("abyss", "incursion") if self.pages[k].session_id), "abyss")
         self.show(active)
+        self.after(150, self.bring_to_front)
+
+    def bring_to_front(self):
+        """macOS often opens Tk windows behind the terminal; raise and focus it."""
+        self.deiconify()
+        self.lift()
+        self.attributes("-topmost", True)
+        self.after(300, lambda: self.attributes("-topmost", False))
+        self.focus_force()
 
     def show(self, key):
         if self.current:
@@ -891,6 +900,12 @@ class App(ctk.CTk):
 
 
 def main():
+    if tk.TkVersion < 8.6:
+        raise SystemExit(
+            f"This Python uses Tk {tk.TkVersion}, which is too old to show the window "
+            f"(Apple's built-in /usr/bin/python3 does this).\n"
+            "Install Python from python.org, or on Homebrew: brew install python python-tk"
+        )
     ctk.set_appearance_mode("dark")
     ctk.set_default_color_theme("dark-blue")
     App().mainloop()
