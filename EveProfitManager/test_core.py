@@ -103,6 +103,47 @@ class TrackerTest(unittest.TestCase):
                 call()
         self.assertEqual(self.tracker.totals().runs, 0)
 
+    def test_abyss_session_keeps_weather_and_tier(self):
+        sid = self.tracker.start_session(ABYSS, starting_isk=100, weather="Firestorm", tier=3)
+        session = self.tracker.session(sid)
+        self.assertEqual((session.weather, session.tier), ("Firestorm", 3))
+        inc = self.tracker.session(self.tracker.start_session(INCURSION))
+        self.assertEqual((inc.weather, inc.tier), (None, None))
+
+    def test_bad_filament_is_rejected(self):
+        for kind, weather, tier in (
+            (ABYSS, "Sunny", 3),
+            (ABYSS, "Gamma", 7),
+            (ABYSS, "Gamma", -1),
+            (ABYSS, "Gamma", None),
+            (ABYSS, "Gamma", True),
+            (ABYSS, None, 2),
+            (INCURSION, "Dark", 1),
+        ):
+            with self.assertRaises(ValueError):
+                self.tracker.start_session(kind, weather=weather, tier=tier)
+        self.assertEqual(self.tracker.sessions(), [])
+
+    def test_totals_by_weather(self):
+        for weather, tier, profit, time_left in (
+            ("Gamma", 4, 60, 5),       # 60M in 15 min
+            ("Electrical", 3, 20, 10),  # 20M in 10 min
+            ("Gamma", 5, 30, 0),       # 30M in 20 min
+            (None, None, 10, 10),      # before weather was recorded
+        ):
+            sid = self.tracker.start_session(ABYSS, starting_isk=100, weather=weather, tier=tier)
+            self.tracker.log_abyss_run(sid, 100, 100 + profit, time_left)
+        self.tracker.start_session(ABYSS, starting_isk=100, weather="Dark", tier=1)  # no runs yet
+        inc = self.tracker.start_session(INCURSION)
+        self.tracker.log_incursion_site(inc, 31, 10)
+
+        by_weather = self.tracker.totals_by_weather()
+        self.assertEqual(list(by_weather), ["Electrical", "Gamma", None])
+        gamma = by_weather["Gamma"]
+        self.assertEqual((gamma.profit, gamma.minutes, gamma.runs, gamma.sessions), (90, 35, 2, 2))
+        self.assertAlmostEqual(by_weather["Electrical"].isk_per_hour, 120)
+        self.assertEqual(by_weather[None].profit, 10)
+
     def test_settings(self):
         self.assertEqual(self.tracker.get_setting("x", "d"), "d")
         self.tracker.set_setting("x", 31)
@@ -161,6 +202,37 @@ class ImportTest(unittest.TestCase):
             path.write_text(OLD_FILE, encoding="utf-8")
             tracker = Tracker(db)
             self.assertEqual(tracker.import_sessions_txt(path), 3)
+            tracker.close()
+
+    def test_database_from_before_filaments_gains_weather_and_tier(self):
+        with TemporaryDirectory() as tmp:
+            db = Path(tmp) / "old.db"
+            conn = sqlite3.connect(db)
+            conn.execute(
+                "CREATE TABLE sessions (id INTEGER PRIMARY KEY, kind TEXT NOT NULL, started_at TEXT NOT NULL, "
+                "ended_at TEXT, starting_isk REAL, imported INTEGER NOT NULL DEFAULT 0, import_key TEXT)"
+            )
+            conn.execute("INSERT INTO sessions (kind, started_at) VALUES ('abyss', '2026-01-01T10:00:00')")
+            conn.commit()
+            conn.close()
+            tracker = Tracker(db)
+            old = tracker.sessions()[0]
+            self.assertEqual((old.weather, old.tier), (None, None))
+            sid = tracker.start_session(ABYSS, starting_isk=100, weather="Dark", tier=4)
+            self.assertEqual(tracker.session(sid).weather, "Dark")
+            tracker.close()
+
+    def test_last_filament_is_remembered(self):
+        with TemporaryDirectory() as tmp:
+            db = Path(tmp) / "t.db"
+            tracker = Tracker(db)
+            self.assertEqual(tracker.last_filament(), (None, None))
+            tracker.start_session(ABYSS, starting_isk=100, weather="Exotic", tier=2)
+            tracker.start_session(ABYSS, starting_isk=100, weather="Gamma", tier=5)
+            tracker.start_session(ABYSS, starting_isk=100)  # no filament: keeps the last one
+            tracker.close()
+            tracker = Tracker(db)
+            self.assertEqual(tracker.last_filament(), ("Gamma", 5))
             tracker.close()
 
 

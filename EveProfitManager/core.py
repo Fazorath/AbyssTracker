@@ -16,6 +16,9 @@ from pathlib import Path
 MAXTIME = 20.00  # Length of the abyssal timer in minutes
 ABYSS = "abyss"
 INCURSION = "incursion"
+WEATHERS = ("Electrical", "Dark", "Exotic", "Firestorm", "Gamma")
+# Filament tier words, indexed by tier: "Fierce Firestorm Filament" is a T3 Firestorm
+TIERS = ("Tranquil", "Calm", "Agitated", "Fierce", "Raging", "Chaotic", "Cataclysmic")
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS sessions (
@@ -25,7 +28,9 @@ CREATE TABLE IF NOT EXISTS sessions (
     ended_at TEXT,
     starting_isk REAL,
     imported INTEGER NOT NULL DEFAULT 0,
-    import_key TEXT
+    import_key TEXT,
+    weather TEXT,
+    tier INTEGER
 );
 CREATE TABLE IF NOT EXISTS runs (
     id INTEGER PRIMARY KEY,
@@ -80,6 +85,11 @@ def format_minutes(minutes):
     return f"{hours}h {mins:02d}m" if hours else f"{mins}m"
 
 
+def tier_label(tier):
+    """Format a filament tier as 'T3 Fierce'."""
+    return f"T{tier} {TIERS[tier]}"
+
+
 def format_isk(millions):
     """Format millions of ISK as '31.0M' or '1.25B'."""
     if abs(millions) >= 1000:
@@ -106,6 +116,8 @@ class Session:
     ended_at: datetime | None
     starting_isk: float | None
     imported: bool
+    weather: str | None = None
+    tier: int | None = None
     profit: float = 0.0
     minutes: float = 0.0
     runs: int = 0
@@ -145,31 +157,53 @@ class Tracker:
         self.db.execute("PRAGMA foreign_keys = ON")
         self.db.executescript(SCHEMA)
         columns = [r["name"] for r in self.db.execute("PRAGMA table_info(sessions)")]
-        if "import_key" not in columns:  # databases created before import keys existed
-            self.db.execute("ALTER TABLE sessions ADD COLUMN import_key TEXT")
+        # Columns added after the first release, for databases created before them
+        for column, type_ in (("import_key", "TEXT"), ("weather", "TEXT"), ("tier", "INTEGER")):
+            if column not in columns:
+                self.db.execute(f"ALTER TABLE sessions ADD COLUMN {column} {type_}")
 
     def close(self):
         self.db.close()
 
     # --- sessions -------------------------------------------------------
 
-    def start_session(self, kind, starting_isk=None):
+    def start_session(self, kind, starting_isk=None, weather=None, tier=None):
         """
         Open a new session.
 
         Args:
             kind (str): ABYSS or INCURSION.
             starting_isk (float, optional): Wallet before the first abyssal run.
+            weather (str, optional): Abyssal weather from WEATHERS.
+            tier (int, optional): Filament tier, 0 (Tranquil) to 6 (Cataclysmic).
 
         Returns:
             int: The new session id.
         """
+        _require_filament(kind, weather, tier)
         with self.db:
             cur = self.db.execute(
-                "INSERT INTO sessions (kind, started_at, starting_isk) VALUES (?, ?, ?)",
-                (kind, _now(), starting_isk),
+                "INSERT INTO sessions (kind, started_at, starting_isk, weather, tier) VALUES (?, ?, ?, ?, ?)",
+                (kind, _now(), starting_isk, weather, tier),
             )
+        if weather is not None:
+            self.set_setting("abyss_weather", weather)
+            self.set_setting("abyss_tier", tier)
         return cur.lastrowid
+
+    def last_filament(self):
+        """
+        The weather and tier of the last abyss session started with a filament.
+
+        Returns:
+            tuple: (weather, tier), or (None, None) if none has been picked yet.
+        """
+        weather, tier = self.get_setting("abyss_weather"), self.get_setting("abyss_tier")
+        try:
+            _require_filament(ABYSS, weather, int(tier))
+        except (TypeError, ValueError):
+            return None, None
+        return weather, int(tier)
 
     def end_session(self, session_id):
         """Close a session. Sessions with no runs are deleted instead."""
@@ -296,7 +330,24 @@ class Tracker:
             f"FROM sessions s JOIN runs r ON r.session_id = s.id {where}",
             args,
         ).fetchone()
-        return Totals(row["profit"], row["minutes"], row["runs"], row["sessions"])
+        return _totals(row)
+
+    def totals_by_weather(self):
+        """
+        Lifetime abyss totals for each weather that has runs.
+
+        Returns:
+            dict: Totals keyed by weather in WEATHERS order, with sessions that
+            have no weather recorded under None at the end.
+        """
+        rows = self.db.execute(
+            "SELECT s.weather, SUM(r.profit) AS profit, SUM(r.minutes) AS minutes, "
+            "SUM(r.count) AS runs, COUNT(DISTINCT s.id) AS sessions "
+            "FROM sessions s JOIN runs r ON r.session_id = s.id WHERE s.kind = ? GROUP BY s.weather",
+            (ABYSS,),
+        ).fetchall()
+        found = {r["weather"]: _totals(r) for r in rows}
+        return {w: found[w] for w in (*WEATHERS, None) if w in found}
 
     # --- settings -------------------------------------------------------
 
@@ -411,6 +462,17 @@ def _require_finite(*values):
         raise ValueError("Amounts and times must be real numbers")
 
 
+def _require_filament(kind, weather, tier):
+    if weather is None and tier is None:
+        return
+    if kind != ABYSS:
+        raise ValueError("Only abyss sessions have a filament")
+    if weather not in WEATHERS:
+        raise ValueError(f"Weather must be one of {', '.join(WEATHERS)}")
+    if isinstance(tier, bool) or not (isinstance(tier, int) and 0 <= tier < len(TIERS)):
+        raise ValueError(f"Tier must be 0 to {len(TIERS) - 1}")
+
+
 def _now():
     return datetime.now().isoformat(timespec="seconds")
 
@@ -429,10 +491,16 @@ def _session(row):
         ended_at=datetime.fromisoformat(row["ended_at"]) if row["ended_at"] else None,
         starting_isk=row["starting_isk"],
         imported=bool(row["imported"]),
+        weather=row["weather"],
+        tier=row["tier"],
         profit=row["profit"],
         minutes=row["minutes"],
         runs=row["run_count"],
     )
+
+
+def _totals(row):
+    return Totals(row["profit"], row["minutes"], row["runs"], row["sessions"])
 
 
 def _run(row):

@@ -1,6 +1,6 @@
 from colorama import Fore
-from globals import title, clear, askNumber
-from core import Tracker, ABYSS, MAXTIME, isk_per_hour
+from globals import title, clear, askNumber, askChoice
+from core import Tracker, ABYSS, MAXTIME, TIERS, WEATHERS, isk_per_hour, tier_label
 
 
 def abyssMain(tracker=None):
@@ -15,8 +15,9 @@ def abyssMain(tracker=None):
     """
     tracker = tracker or Tracker()
     print(title)
+    weather, tier = askFilament(tracker)
     startingIsk = startingInven()
-    session_id = tracker.start_session(ABYSS, startingIsk)
+    session_id = tracker.start_session(ABYSS, startingIsk, weather, tier)
     try:
         while True:
             after_inv = afterInven()
@@ -64,6 +65,24 @@ def printRun(run):
         f"\n{Fore.GREEN}Time inside Abyss: {Fore.RED}{run.minutes} Mins"
         f"\n{Fore.GREEN}ISK per Hour: {Fore.RED}{isk_per_hour(run.profit, run.minutes):.1f} Million\n"
     )
+
+
+def askFilament(tracker):
+    """
+    Ask for the weather and tier of the filament being run, defaulting to the last choice.
+
+    Args:
+        tracker (Tracker): Store holding the last choice.
+
+    Returns:
+        tuple: (weather, tier) for Tracker.start_session.
+    """
+    last_weather, last_tier = tracker.last_filament()
+    print()
+    weather_index = askChoice("Weather", WEATHERS, WEATHERS.index(last_weather) if last_weather else None)
+    print()
+    tier = askChoice("Tier", [tier_label(t) for t in range(len(TIERS))], last_tier)
+    return WEATHERS[weather_index], tier
 
 
 def startingInven():

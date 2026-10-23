@@ -36,6 +36,30 @@ def askNumber(prompt, minimum=None, maximum=None):
             return value
 
 
+def askChoice(prompt, options, default=None):
+    """
+    Show a numbered list and keep asking until the user picks one.
+
+    Args:
+        prompt (str): Text shown before the input.
+        options (list[str]): Choices to number from 1.
+        default (int, optional): Index picked when the user just presses Enter.
+
+    Returns:
+        int: Index of the chosen option.
+    """
+    for i, option in enumerate(options, 1):
+        print(f"{Fore.GREEN}{i}. {option}")
+    hint = f" [{options[default]}]" if default is not None else ""
+    while True:
+        answer = input(f"{Fore.GREEN}{prompt}{hint}: {Fore.RED}").strip()
+        if not answer and default is not None:
+            return default
+        if answer.isdigit() and 1 <= int(answer) <= len(options):
+            return int(answer) - 1
+        print(f"{Fore.YELLOW}Please enter a number from 1 to {len(options)}\n")
+
+
 title = """
  ██▓███   ██▀███   ▒█████    █████▒██▓▄▄▄█████▓    ███▄ ▄███▓ ▄▄▄       ███▄    █  ▄▄▄        ▄████ ▓█████  ██▀███  
 ▓██░  ██▒▓██ ▒ ██▒▒██▒  ██▒▓██   ▒▓██▒▓  ██▒ ▓▒   ▓██▒▀█▀ ██▒▒████▄     ██ ▀█   █ ▒████▄     ██▒ ▀█▒▓█   ▀ ▓██ ▒ ██▒
