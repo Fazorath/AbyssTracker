@@ -2,11 +2,14 @@
 
 This program is designed to help users track their profits and time spent during Abyssal runs and Incursions in a massively multiplayer online role-playing game (MMORPG). It provides a user-friendly interface for inputting relevant data and automatically calculates profits based on initial and final ISK amounts and time spent in each activity.
 
+![Abyss page with a live session, the abyssal timer and the run log](docs/screenshots/abyss.png)
+
 ## Table of Contents
 
 - [Abyssal and Incursion Tracker](#abyssal-and-incursion-tracker)
   - [Table of Contents](#table-of-contents)
   - [Features](#features)
+  - [Screenshots](#screenshots)
   - [Getting Started](#getting-started)
     - [Prerequisites](#prerequisites)
     - [Installation](#installation)
@@ -36,6 +39,18 @@ This program is designed to help users track their profits and time spent during
 
 Data is stored in SQLite at `%APPDATA%\AbyssTracker\tracker.db` on Windows
 (`~/.local/share/AbyssTracker/tracker.db` elsewhere). Set `ABYSS_TRACKER_DB` to use a different file.
+
+## Screenshots
+
+Screenshots use sample data.
+
+**Incursion page**: payout per site, site stopwatch and live session stats.
+
+![Incursion page with a live session and the site stopwatch](docs/screenshots/incursion.png)
+
+**History page**: lifetime totals, profit per session (hover a bar for details) and every past session.
+
+![History page with lifetime totals, the profit-per-session chart and the session list](docs/screenshots/history.png)
 
 ## Getting Started
 

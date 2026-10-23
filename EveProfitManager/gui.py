@@ -552,7 +552,7 @@ class IncursionPage(SessionPage):
 
     def build_log_form(self, frame):
         self.payout = self.field(frame, 0, "Payout (M)", 130)
-        self.minutes = self.field(frame, 1, "Site time (min)", 130, "blank = stopwatch")
+        self.minutes = self.field(frame, 1, "Site time (min)", 170, "blank = stopwatch")
 
     def build_timer(self, master):
         return TimerPanel(master, "Site stopwatch", (KIND_COLOR[INCURSION], KIND_HOVER[INCURSION]))
