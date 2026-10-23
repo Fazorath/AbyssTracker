@@ -1,3 +1,4 @@
+import sqlite3
 import unittest
 from datetime import datetime
 from pathlib import Path
@@ -78,6 +79,30 @@ class TrackerTest(unittest.TestCase):
         self.tracker.delete_run(run.id)
         self.assertEqual(self.tracker.session(sid).runs, 0)
 
+    def test_deleting_middle_abyss_run_keeps_wallet_gain(self):
+        sid = self.tracker.start_session(ABYSS, starting_isk=1000)
+        self.tracker.log_abyss_run(sid, 1000, 1030, time_left=10)
+        middle = self.tracker.log_abyss_run(sid, 1030, 1060, time_left=10)
+        self.tracker.log_abyss_run(sid, 1060, 1100, time_left=10)
+        self.tracker.delete_run(middle.id)
+        session = self.tracker.session(sid)
+        self.assertEqual((session.runs, session.profit), (2, 100))
+        self.assertEqual(self.tracker.current_isk(sid), 1100)
+
+    def test_non_finite_values_are_rejected(self):
+        abyss = self.tracker.start_session(ABYSS, starting_isk=100)
+        inc = self.tracker.start_session(INCURSION)
+        nan, inf = float("nan"), float("inf")
+        for call in (
+            lambda: self.tracker.log_abyss_run(abyss, 100, inf, time_left=5),
+            lambda: self.tracker.log_abyss_run(abyss, 100, 120, time_left=nan),
+            lambda: self.tracker.log_incursion_site(inc, nan, 10),
+            lambda: self.tracker.log_incursion_site(inc, 31, inf),
+        ):
+            with self.assertRaises(ValueError):
+                call()
+        self.assertEqual(self.tracker.totals().runs, 0)
+
     def test_settings(self):
         self.assertEqual(self.tracker.get_setting("x", "d"), "d")
         self.tracker.set_setting("x", 31)
@@ -103,6 +128,39 @@ class ImportTest(unittest.TestCase):
             self.assertEqual(tracker.import_sessions_txt(path), 0)
             totals = tracker.totals()
             self.assertEqual((totals.profit, totals.runs, totals.sessions), (113, 5, 3))
+            tracker.close()
+
+
+    def test_identical_undated_sessions_are_all_imported(self):
+        block = (
+            "Incursion Details!\n \nTotal Profit: 93 Million\n"
+            "Total Incursions Ran: 3 Sites\nTotal Time: 36 Min\n-------------------\n"
+        )
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "Sessions.txt"
+            path.write_text(block * 2, encoding="utf-8")
+            tracker = Tracker(Path(tmp) / "t.db")
+            self.assertEqual(tracker.import_sessions_txt(path), 2)
+            path.write_text(block * 3, encoding="utf-8")
+            self.assertEqual(tracker.import_sessions_txt(path), 1)
+            self.assertEqual(tracker.totals(INCURSION).sessions, 3)
+            tracker.close()
+
+
+    def test_database_from_before_import_keys_still_opens(self):
+        with TemporaryDirectory() as tmp:
+            db = Path(tmp) / "old.db"
+            conn = sqlite3.connect(db)
+            conn.execute(
+                "CREATE TABLE sessions (id INTEGER PRIMARY KEY, kind TEXT NOT NULL, started_at TEXT NOT NULL, "
+                "ended_at TEXT, starting_isk REAL, imported INTEGER NOT NULL DEFAULT 0)"
+            )
+            conn.commit()
+            conn.close()
+            path = Path(tmp) / "Sessions.txt"
+            path.write_text(OLD_FILE, encoding="utf-8")
+            tracker = Tracker(db)
+            self.assertEqual(tracker.import_sessions_txt(path), 3)
             tracker.close()
 
 

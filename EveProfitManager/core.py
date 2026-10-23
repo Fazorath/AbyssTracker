@@ -3,6 +3,8 @@ Shared tracking logic and storage for the CLI and the desktop UI.
 
 All ISK amounts are in millions, all times are in minutes.
 """
+import hashlib
+import math
 import os
 import re
 import sqlite3
@@ -22,7 +24,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     started_at TEXT NOT NULL,
     ended_at TEXT,
     starting_isk REAL,
-    imported INTEGER NOT NULL DEFAULT 0
+    imported INTEGER NOT NULL DEFAULT 0,
+    import_key TEXT
 );
 CREATE TABLE IF NOT EXISTS runs (
     id INTEGER PRIMARY KEY,
@@ -141,6 +144,9 @@ class Tracker:
         self.db.row_factory = sqlite3.Row
         self.db.execute("PRAGMA foreign_keys = ON")
         self.db.executescript(SCHEMA)
+        columns = [r["name"] for r in self.db.execute("PRAGMA table_info(sessions)")]
+        if "import_key" not in columns:  # databases created before import keys existed
+            self.db.execute("ALTER TABLE sessions ADD COLUMN import_key TEXT")
 
     def close(self):
         self.db.close()
@@ -214,12 +220,14 @@ class Tracker:
         Returns:
             Run: The recorded run.
         """
+        _require_finite(isk_before, isk_after, time_left)
         if not 0 <= time_left <= MAXTIME:
             raise ValueError(f"Time left must be between 0 and {MAXTIME:g} minutes")
         return self._add_run(session_id, isk_after - isk_before, MAXTIME - time_left, isk_after)
 
     def log_incursion_site(self, session_id, profit, minutes):
         """Record one incursion site."""
+        _require_finite(profit, minutes)
         if minutes < 0:
             raise ValueError("Time can't be negative")
         return self._add_run(session_id, profit, minutes, None)
@@ -244,7 +252,25 @@ class Tracker:
         return [_run(r) for r in rows]
 
     def delete_run(self, run_id):
+        """
+        Delete a run. For abyssal runs the next run's profit is re-based on the
+        wallet before the deleted run, so the session still matches the wallet change.
+        """
+        run = self.run(run_id)
+        if run is None:
+            return
         with self.db:
+            if run.isk_after is not None:
+                after = self.db.execute(
+                    "SELECT id, isk_after FROM runs WHERE session_id = ? AND id > ? "
+                    "AND isk_after IS NOT NULL ORDER BY id LIMIT 1",
+                    (run.session_id, run_id),
+                ).fetchone()
+                if after:
+                    before = run.isk_after - run.profit
+                    self.db.execute(
+                        "UPDATE runs SET profit = ? WHERE id = ?", (after["isk_after"] - before, after["id"])
+                    )
             self.db.execute("DELETE FROM runs WHERE id = ?", (run_id,))
 
     def current_isk(self, session_id):
@@ -294,7 +320,8 @@ class Tracker:
 
         Each summary becomes a closed session holding a single row with the
         session totals, since the old file didn't keep per-run details.
-        Summaries already imported (same kind, date and totals) are skipped.
+        Each entry is keyed by its text and how many identical entries came
+        before it, so re-importing a file that has grown only adds the new ones.
 
         Args:
             path (str | Path): Path to Sessions.txt.
@@ -303,26 +330,24 @@ class Tracker:
             int: Number of sessions imported.
         """
         imported = 0
-        for entry in parse_sessions_txt(Path(path).read_text(encoding="utf-8", errors="replace")):
-            when = entry["date"] or datetime(1970, 1, 1)
-            stamp = when.isoformat(timespec="seconds")
-            duplicate = self.db.execute(
-                "SELECT 1 FROM sessions s JOIN runs r ON r.session_id = s.id "
-                "WHERE s.imported = 1 AND s.kind = ? AND s.started_at = ? "
-                "AND r.profit = ? AND r.minutes = ? AND r.count = ?",
-                (entry["kind"], stamp, entry["profit"], entry["minutes"], entry["runs"]),
-            ).fetchone()
-            if duplicate:
-                continue
-            with self.db:
+        with self.db:  # one transaction: all entries or none
+            for entry in parse_sessions_txt(Path(path).read_text(encoding="utf-8", errors="replace")):
+                if self.db.execute(
+                    "SELECT 1 FROM sessions WHERE import_key = ?", (entry["key"],)
+                ).fetchone():
+                    continue
+                stamp = (entry["date"] or datetime(1970, 1, 1)).isoformat(timespec="seconds")
                 cur = self.db.execute(
-                    "INSERT INTO sessions (kind, started_at, ended_at, imported) VALUES (?, ?, ?, 1)",
-                    (entry["kind"], stamp, stamp),
+                    "INSERT INTO sessions (kind, started_at, ended_at, imported, import_key) "
+                    "VALUES (?, ?, ?, 1, ?)",
+                    (entry["kind"], stamp, stamp, entry["key"]),
                 )
-            self._add_run(
-                cur.lastrowid, entry["profit"], entry["minutes"], None, entry["runs"], stamp
-            )
-            imported += 1
+                self.db.execute(
+                    "INSERT INTO runs (session_id, recorded_at, profit, minutes, isk_after, count) "
+                    "VALUES (?, ?, ?, ?, NULL, ?)",
+                    (cur.lastrowid, stamp, entry["profit"], entry["minutes"], entry["runs"]),
+                )
+                imported += 1
         return imported
 
 
@@ -334,9 +359,11 @@ def parse_sessions_txt(text):
         text (str): File contents.
 
     Returns:
-        list[dict]: Entries with kind, profit, runs, minutes and date (datetime or None).
+        list[dict]: Entries with kind, profit, runs, minutes, date (datetime or None)
+        and a stable import key.
     """
     entries = []
+    seen = {}
     for block in text.split("-------------------"):
         if "Abyss Details" in block:
             kind = ABYSS
@@ -348,7 +375,10 @@ def parse_sessions_txt(text):
         runs = _match(r"Total (?:Abyssal runs|Incursions Ran):\s*(\d+)", block, int, 0)
         minutes = _match(r"Total Time:\s*([\d.]+)", block, float, 0.0)
         date = _match(r"Date:\s*(.+)", block, _parse_date, None)
-        entries.append(dict(kind=kind, profit=profit, runs=runs, minutes=minutes, date=date))
+        digest = hashlib.sha1(" ".join(block.split()).encode()).hexdigest()
+        seen[digest] = seen.get(digest, 0) + 1
+        key = f"{digest}#{seen[digest]}"
+        entries.append(dict(kind=kind, profit=profit, runs=runs, minutes=minutes, date=date, key=key))
     return entries
 
 
@@ -374,6 +404,11 @@ def _match(pattern, text, convert, default):
         return convert(match.group(1))
     except ValueError:
         return default
+
+
+def _require_finite(*values):
+    if not all(isinstance(v, (int, float)) and math.isfinite(v) for v in values):
+        raise ValueError("Amounts and times must be real numbers")
 
 
 def _now():

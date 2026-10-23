@@ -3,6 +3,7 @@ Desktop UI for the Abyss and Incursion tracker.
 
 Run with:  python gui.py
 """
+import math
 import time
 import tkinter as tk
 from tkinter import filedialog, messagebox
@@ -55,9 +56,12 @@ def parse_isk(text, field="value"):
     if scale is not None:
         raw = raw[:-1]
     try:
-        return float(raw) * (scale or 1.0)
+        value = float(raw) * (scale or 1.0)
     except ValueError:
-        raise ValueError(f"Enter a number for {field} (e.g. 31.5, 1.2b, 800k)") from None
+        value = math.nan
+    if not math.isfinite(value):
+        raise ValueError(f"Enter a number for {field} (e.g. 31.5, 1.2b, 800k)")
+    return value
 
 
 def parse_minutes(text, field="time"):
@@ -66,10 +70,14 @@ def parse_minutes(text, field="time"):
     try:
         if ":" in raw:
             mins, secs = raw.split(":", 1)
-            return int(mins) + int(secs) / 60
-        return float(raw)
+            value = int(mins) + int(secs) / 60
+        else:
+            value = float(raw)
     except ValueError:
-        raise ValueError(f"Enter minutes for {field} (e.g. 14.5 or 14:30)") from None
+        value = math.nan
+    if not math.isfinite(value):
+        raise ValueError(f"Enter minutes for {field} (e.g. 14.5 or 14:30)")
+    return value
 
 
 def signed_isk(millions):
@@ -397,12 +405,14 @@ class SessionPage(ctk.CTkFrame):
     def log(self):
         if self.session_id is None:
             return
+        self.used_timer = False
         try:
             run = self.log_run()
         except ValueError as err:
             self.flash(str(err), CRITICAL_TEXT)
             return
-        self.timer.reset()
+        if self.used_timer:  # a typed time leaves a running timer alone
+            self.timer.reset()
         self.after_log()
         self.flash(
             f"Logged {signed_isk(run.profit)} in {format_minutes(run.minutes)}",
@@ -418,6 +428,7 @@ class SessionPage(ctk.CTkFrame):
         value = self.timer.value_minutes()
         if value is None:
             raise ValueError(f"Enter {field}, or use the timer")
+        self.used_timer = True
         return value
 
     def delete_run(self, run_id):
@@ -775,7 +786,7 @@ class HistoryPage(ctk.CTkFrame):
         for s in sessions[:300]:
             kind_label = KIND_NAME[s.kind] + (" · live" if s.active else " · txt" if s.imported else "")
             rows.append((s.id, [
-                (f"{s.started_at:%d %b %Y  %H:%M}", INK_2),
+                ("undated" if s.started_at.year == 1970 else f"{s.started_at:%d %b %Y  %H:%M}", INK_2),
                 (kind_label, GOOD_TEXT if s.active else INK_2),
                 (str(s.runs), INK_2),
                 (format_minutes(s.minutes), INK_2),
@@ -877,6 +888,7 @@ class App(ctk.CTk):
         if self.current:
             self.pages[self.current].pack_forget()
         self.current = key
+        self.pages[key].refresh()
         self.pages[key].pack(fill="both", expand=True)
         for name, btn in self.nav.items():
             live = name in ("abyss", "incursion") and self.pages[name].session_id
@@ -888,8 +900,7 @@ class App(ctk.CTk):
             )
 
     def refresh(self):
-        for page in self.pages.values():
-            page.refresh()
+        """Refresh the sidebar and the visible page; hidden pages refresh when shown."""
         totals = self.tracker.totals()
         self.lifetime_profit.configure(text=signed_isk(totals.profit), text_color=profit_color(totals.profit))
         self.lifetime_rate.configure(
@@ -897,6 +908,9 @@ class App(ctk.CTk):
         )
         if self.current:
             self.show(self.current)
+        else:
+            for page in self.pages.values():
+                page.refresh()
 
 
 def main():
