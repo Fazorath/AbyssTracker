@@ -14,6 +14,8 @@ from core import (
     ABYSS,
     INCURSION,
     MAXTIME,
+    TIERS,
+    WEATHERS,
     Tracker,
     format_isk,
     format_minutes,
@@ -82,6 +84,11 @@ def parse_minutes(text, field="time"):
 
 def signed_isk(millions):
     return ("+" if millions > 0 else "") + format_isk(millions)
+
+
+def tier_label(tier):
+    """Format a filament tier as 'T3 Fierce'."""
+    return f"T{tier} {TIERS[tier]}"
 
 
 def profit_color(millions):
@@ -372,6 +379,19 @@ class SessionPage(ctk.CTkFrame):
         entry.grid(row=1, column=column, sticky="w", padx=(0, 12), pady=(2, 0))
         return entry
 
+    def choice(self, frame, column, label, values, value, width=170):
+        """Add a labelled dropdown to a form row and return it."""
+        ctk.CTkLabel(frame, text=label, font=font(12), text_color=INK_2).grid(
+            row=0, column=column, sticky="w", padx=(0, 12)
+        )
+        menu = ctk.CTkOptionMenu(
+            frame, values=values, width=width, height=36, font=font(15), fg_color=PAGE,
+            button_color=AXIS, button_hover_color=BORDER, text_color=INK,
+        )
+        menu.set(value)
+        menu.grid(row=1, column=column, sticky="w", padx=(0, 12), pady=(2, 0))
+        return menu
+
     def resume(self):
         session = self.tracker.active_session(self.kind)
         self.session_id = session.id if session else None
@@ -459,8 +479,10 @@ class SessionPage(ctk.CTkFrame):
         self.start_view.pack_forget()
         self.live_view.pack(fill="both", expand=True)
         self.end_btn.pack(side="right")
+        filament = f"  ·  {tier_label(session.tier)} {session.weather}" if session.weather else ""
         self.status.configure(
-            text=f"● Live since {session.started_at:%H:%M}  ·  {session.started_at:%a %d %b}", text_color=GOOD_TEXT
+            text=f"● Live since {session.started_at:%H:%M}  ·  {session.started_at:%a %d %b}{filament}",
+            text_color=GOOD_TEXT,
         )
         runs = self.tracker.runs(self.session_id)
         self.update_cards(session, runs)
@@ -480,6 +502,10 @@ class AbyssPage(SessionPage):
     def build_start_form(self, frame):
         self.start_isk = self.field(frame, 0, "Wallet now (million ISK)", 220, "e.g. 1,250 or 1.25b")
         self.start_isk.bind("<Return>", lambda _e: self.start_session())
+        weather, tier = self.tracker.last_filament()
+        self.weather = self.choice(frame, 1, "Weather", list(WEATHERS), weather or WEATHERS[0], 150)
+        self.tier_labels = [tier_label(t) for t in range(len(TIERS))]
+        self.tier = self.choice(frame, 2, "Tier", self.tier_labels, self.tier_labels[tier or 0], 170)
 
     def build_log_form(self, frame):
         self.after_isk = self.field(frame, 0, "Wallet after run (M)", 200, "e.g. 1,281")
@@ -500,7 +526,11 @@ class AbyssPage(SessionPage):
                 ("Duration", 100, "e"), ("ISK / hr", 120, "e")]
 
     def start_args(self):
-        return {"starting_isk": parse_isk(self.start_isk.get(), "your wallet")}
+        return {
+            "starting_isk": parse_isk(self.start_isk.get(), "your wallet"),
+            "weather": self.weather.get(),
+            "tier": self.tier_labels.index(self.tier.get()),
+        }
 
     def log_run(self):
         after = parse_isk(self.after_isk.get(), "wallet after")
