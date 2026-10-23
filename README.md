@@ -11,66 +11,77 @@ This program is designed to help users track their profits and time spent during
     - [Prerequisites](#prerequisites)
     - [Installation](#installation)
   - [Usage](#usage)
-  - [Incursion Tracker](#incursion-tracker)
   - [Contributing](#contributing)
 - [Todo:](#todo)
 - [4/5/24 TextFile Functionality](#4524-textfile-functionality)
 - [4/10/24](#4102024)
 - [4/18/24](#4182024)
 - [4/21/24](#42124)
+- [10/23/26](#102326)
 
 ## Features
 
-**Abyssal Money Tracker:**
-  - Input starting ISK, ending ISK, and time spent to calculate profit for each Abyssal run.
-  - Automatically keeps track of total profits, number of runs, and total time spent.
-  - Allows users to track multiple Abyssal runs and provides an option to stop tracking when finished.
+**Desktop app (`gui.py`):**
+  - **Abyss page:** enter your wallet once, then log each run with the new wallet total and the time left on the
+    20-minute timer. A built-in abyssal countdown can fill in the time for you (leave the field blank).
+  - **Incursion page:** set the payout per site (remembered between sessions) and log each site's time, typed or
+    from the built-in stopwatch.
+  - Live stat cards for session profit, **ISK/hour**, runs, time and wallet, plus a run log you can delete mistakes from.
+  - **History page:** lifetime totals, a profit-per-session chart with hover details, and every past session,
+    filterable by Abyss/Incursion. Old `Sessions.txt` files can be imported.
+  - Every run is saved immediately, so closing the app mid-session picks up where you left off.
+  - Amounts are in millions of ISK; you can type `1,250`, `1.25b` or `800k`. Times accept `14.5` or `14:30`.
 
-**Incursion Tracker:**
-  - Similar to Abyssal Money Tracker, but tailored for tracking Incursions.
-  - Users can input profit per incursion and time spent per incursion.
-  - Provides an option to track multiple incursions and stops when the user chooses to finish.
+**Terminal tracker (`main.py`):** the original menu-driven tracker, now saving to the same database and showing ISK/hour.
+
+Data is stored in SQLite at `%APPDATA%\AbyssTracker\tracker.db` on Windows
+(`~/.local/share/AbyssTracker/tracker.db` elsewhere). Set `ABYSS_TRACKER_DB` to use a different file.
 
 ## Getting Started
 
 ### Prerequisites
 
-To run this program, you need to have Python installed on your system. You can download and install Python from the official website: [python.org](https://www.python.org/).
+Python 3.10+ with Tkinter (included in the installers from [python.org](https://www.python.org/)).
 
 ### Installation
 
 1. Clone the repository to your local machine:
-
    ```bash
-   git clone https://github.com/your-username/abyss-incursion-tracker.git
-
-2. Navigate to the project directory:
-   ```bash
-   cd abyss-incursion-tracker
-
-3. Install the required dependencies:
+   git clone https://github.com/Fazorath/AbyssTracker.git
+   cd AbyssTracker
+   ```
+2. Install the required dependencies:
    ```bash
    pip install -r requirements.txt
+   ```
 
 ## Usage
-To use the Abyssal and Incursion Tracker, follow the instructions below:
 
-Abyssal Money Tracker
-1. Run the program:
-    ```bash
-    python main.py
-2. Select option 1 to track Abyssal runs.
-3. Enter the starting ISK amount, ending ISK amount, and time spent for each Abyssal run.
-4. Choose whether to track another Abyssal run (1 for Yes, 0 for No).
-5. Once finished, the program will write session details to a text file (Sessions.txt) and display total profits, runs, and time spent.
+Desktop app:
+```bash
+cd EveProfitManager
+python gui.py
+```
+Shortcuts: `Enter` logs a run/site, `Ctrl+1/2/3` switches between Abyss, Incursion and History.
 
-## Incursion Tracker
-1. Run the program:
-    ```bash
-    python main.py
-2. Select option 2 to track Incursions.
-3. Enter the profit per incursion and time spent per incursion.
-4. Follow the same steps as the Abyssal Money Tracker to track multiple incursions.
+Terminal version:
+```bash
+cd EveProfitManager
+python main.py
+```
+
+Build a standalone Windows .exe:
+```bash
+pip install pyinstaller
+cd EveProfitManager
+pyinstaller --noconsole --onefile --collect-data customtkinter --name AbyssTracker gui.py
+```
+
+Run the tests:
+```bash
+cd EveProfitManager
+python -m unittest test_core
+```
 
 ## Contributing
 Contributions are welcome! If you find any bugs or have suggestions for improvements, please open an issue or submit a pull request.
@@ -78,9 +89,7 @@ Contributions are welcome! If you find any bugs or have suggestions for improvem
 License
 This project is licensed under the MIT License - see the LICENSE file for details.
 # Todo:
-1. Function to average out profits hourly in both the abyss and incursion functions
-  - Ran into issues with this because the time is being processed by user input in minutes. Have to find 
-  - out to turn the minutes into the appropriate hour conversion and then we can begin on this.
+1. ~~Function to average out profits hourly in both the abyss and incursion functions~~
 2. ~~error input for the Incursion Module~~
 3. ~~add session details into file for Incursion Module~~
 4. ~~Update incursion module to limit use of Globals and start using parameters~~
@@ -104,3 +113,9 @@ much you made per hour.
 # 4/21/24
 Incursion modules Try again prompt has been updated to use 0 and 1 as well as added
 an incursion ran counter like in the abyss module to keep track.
+
+# 10/23/26
+Desktop UI built with CustomTkinter (`gui.py`): live session stats, a built-in abyssal timer, ISK/hour and a
+history page with a chart. Tracking logic moved into `core.py` and now saves every run to SQLite instead of
+appending summaries to Sessions.txt (which can still be imported). Fixed total profit carrying over between
+abyss sessions, and the terminal version now works on Linux/macOS too.

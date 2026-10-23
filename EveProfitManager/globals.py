@@ -1,7 +1,11 @@
-total_profit = 0
-incProfit = 0
-incursiontime = 0
-MAXTIME = 20.00
+import os
+
+
+def clear():
+    """Clear the terminal on Windows, macOS and Linux."""
+    os.system("cls" if os.name == "nt" else "clear")
+
+
 title = """
  ██▓███   ██▀███   ▒█████    █████▒██▓▄▄▄█████▓    ███▄ ▄███▓ ▄▄▄       ███▄    █  ▄▄▄        ▄████ ▓█████  ██▀███  
 ▓██░  ██▒▓██ ▒ ██▒▒██▒  ██▒▓██   ▒▓██▒▓  ██▒ ▓▒   ▓██▒▀█▀ ██▒▒████▄     ██ ▀█   █ ▒████▄     ██▒ ▀█▒▓█   ▀ ▓██ ▒ ██▒

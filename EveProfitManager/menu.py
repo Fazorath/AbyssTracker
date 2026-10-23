@@ -1,11 +1,13 @@
 from colorama import Fore
-import os
-from abyss import *
-from incursion import *
+from abyss import abyssMain
+from incursion import incursion
+from globals import clear
+from core import Tracker
 
 
-def menu(startloop="False"):
-    while startloop != True:
+def menu():
+    tracker = Tracker()
+    while True:
         menu_text = f"""{Fore.RED}
  ██▓███   ██▀███   ▒█████    █████▒██▓▄▄▄█████▓    ███▄ ▄███▓ ▄▄▄       ███▄    █  ▄▄▄        ▄████ ▓█████  ██▀███  
 ▓██░  ██▒▓██ ▒ ██▒▒██▒  ██▒▓██   ▒▓██▒▓  ██▒ ▓▒   ▓██▒▀█▀ ██▒▒████▄     ██ ▀█   █ ▒████▄     ██▒ ▀█▒▓█   ▀ ▓██ ▒ ██▒
@@ -20,26 +22,20 @@ def menu(startloop="False"):
 1. Abyss Money Tracker
 2. Incursion Tracker
     Choice: {Fore.RED}"""
-        try:
-            user_input = input(menu_text)
-        except ValueError:
-            os.system("CLS")
-            print(f"\n{Fore.RED}Invalid choice. Please enter 1 or 2.")
-            continue
+        user_input = input(menu_text)
 
         if user_input == "1":
-            os.system("CLS")
-            abyssMain()
-            # startloop = True #This will fully end the loop after pressing to not track anymore abyss runs.
+            clear()
+            abyssMain(tracker)
         
         elif user_input == "2":
-            os.system("CLS")
-            incursion()
+            clear()
+            incursion(tracker)
 
         elif user_input.upper() == "Q":
             print("\n    goodbye\n")
             break  # Exit the loop and end the program
 
         else:
-            os.system("CLS")
+            clear()
             print(f"\n{Fore.RED}Invalid choice. Please enter 1 or 2.")
