@@ -20,6 +20,7 @@ from core import (
     format_isk,
     format_minutes,
     isk_per_hour,
+    tier_label,
 )
 
 # Dark theme tokens
@@ -84,11 +85,6 @@ def parse_minutes(text, field="time"):
 
 def signed_isk(millions):
     return ("+" if millions > 0 else "") + format_isk(millions)
-
-
-def tier_label(tier):
-    """Format a filament tier as 'T3 Fierce'."""
-    return f"T{tier} {TIERS[tier]}"
 
 
 def profit_color(millions):

@@ -1,6 +1,6 @@
 from colorama import Fore
 from globals import title, clear, askNumber, askChoice
-from core import Tracker, ABYSS, MAXTIME, TIERS, WEATHERS, isk_per_hour
+from core import Tracker, ABYSS, MAXTIME, TIERS, WEATHERS, isk_per_hour, tier_label
 
 
 def abyssMain(tracker=None):
@@ -15,7 +15,7 @@ def abyssMain(tracker=None):
     """
     tracker = tracker or Tracker()
     print(title)
-    weather, tier = filament(tracker)
+    weather, tier = askFilament(tracker)
     startingIsk = startingInven()
     session_id = tracker.start_session(ABYSS, startingIsk, weather, tier)
     try:
@@ -67,7 +67,7 @@ def printRun(run):
     )
 
 
-def filament(tracker):
+def askFilament(tracker):
     """
     Ask for the weather and tier of the filament being run, defaulting to the last choice.
 
@@ -79,10 +79,10 @@ def filament(tracker):
     """
     last_weather, last_tier = tracker.last_filament()
     print()
-    weather = askChoice("Weather", WEATHERS, WEATHERS.index(last_weather) if last_weather else None)
+    weather_index = askChoice("Weather", WEATHERS, WEATHERS.index(last_weather) if last_weather else None)
     print()
-    tier = askChoice("Tier", [f"T{t} {name}" for t, name in enumerate(TIERS)], last_tier)
-    return WEATHERS[weather], tier
+    tier = askChoice("Tier", [tier_label(t) for t in range(len(TIERS))], last_tier)
+    return WEATHERS[weather_index], tier
 
 
 def startingInven():

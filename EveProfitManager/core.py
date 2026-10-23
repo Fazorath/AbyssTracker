@@ -85,6 +85,11 @@ def format_minutes(minutes):
     return f"{hours}h {mins:02d}m" if hours else f"{mins}m"
 
 
+def tier_label(tier):
+    """Format a filament tier as 'T3 Fierce'."""
+    return f"T{tier} {TIERS[tier]}"
+
+
 def format_isk(millions):
     """Format millions of ISK as '31.0M' or '1.25B'."""
     if abs(millions) >= 1000:
@@ -325,7 +330,7 @@ class Tracker:
             f"FROM sessions s JOIN runs r ON r.session_id = s.id {where}",
             args,
         ).fetchone()
-        return Totals(row["profit"], row["minutes"], row["runs"], row["sessions"])
+        return _totals(row)
 
     def totals_by_weather(self):
         """
@@ -341,7 +346,7 @@ class Tracker:
             "FROM sessions s JOIN runs r ON r.session_id = s.id WHERE s.kind = ? GROUP BY s.weather",
             (ABYSS,),
         ).fetchall()
-        found = {r["weather"]: Totals(r["profit"], r["minutes"], r["runs"], r["sessions"]) for r in rows}
+        found = {r["weather"]: _totals(r) for r in rows}
         return {w: found[w] for w in (*WEATHERS, None) if w in found}
 
     # --- settings -------------------------------------------------------
@@ -464,7 +469,7 @@ def _require_filament(kind, weather, tier):
         raise ValueError("Only abyss sessions have a filament")
     if weather not in WEATHERS:
         raise ValueError(f"Weather must be one of {', '.join(WEATHERS)}")
-    if not (isinstance(tier, int) and 0 <= tier < len(TIERS)):
+    if isinstance(tier, bool) or not (isinstance(tier, int) and 0 <= tier < len(TIERS)):
         raise ValueError(f"Tier must be 0 to {len(TIERS) - 1}")
 
 
@@ -492,6 +497,10 @@ def _session(row):
         minutes=row["minutes"],
         runs=row["run_count"],
     )
+
+
+def _totals(row):
+    return Totals(row["profit"], row["minutes"], row["runs"], row["sessions"])
 
 
 def _run(row):

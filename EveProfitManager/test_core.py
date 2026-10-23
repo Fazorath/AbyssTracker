@@ -116,6 +116,7 @@ class TrackerTest(unittest.TestCase):
             (ABYSS, "Gamma", 7),
             (ABYSS, "Gamma", -1),
             (ABYSS, "Gamma", None),
+            (ABYSS, "Gamma", True),
             (ABYSS, None, 2),
             (INCURSION, "Dark", 1),
         ):
