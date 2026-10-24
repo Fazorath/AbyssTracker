@@ -891,9 +891,9 @@ class ProfitChart(tk.Canvas):
         else:
             return
         t = self.theme
-        filament = f" {tier_label(s.tier)}" if s.tier is not None else ""
+        tier = f" {tier_label(s.tier)}" if s.tier is not None else ""
         lines = [
-            f"{session_label(s)}{filament} · {s.started_at:%a %d %b %Y, %H:%M}",
+            f"{session_label(s)}{tier} · {s.started_at:%a %d %b %Y, %H:%M}",
             f"Profit  {signed_isk(s.profit)}",
             f"{s.runs} {'runs' if s.kind == ABYSS else 'sites'} · {format_minutes(s.minutes)}",
             f"ISK/hr  {format_isk(s.isk_per_hour)}",
@@ -936,9 +936,10 @@ class WeatherRates(tk.Canvas):
     """ISK/hour for each abyssal weather and for incursions as bars, with a line about the best weather."""
 
     ROW = 30
+    BEST = 34  # height of the best-weather line under the bars
 
     def __init__(self, master, theme):
-        super().__init__(master, bg=theme.panel, highlightthickness=0, height=self.ROW * (len(WEATHERS) + 1) + 34)
+        super().__init__(master, bg=theme.panel, highlightthickness=0, height=self.BEST)
         self.theme = theme
         self.rows = []
         self.best = ""
@@ -952,6 +953,7 @@ class WeatherRates(tk.Canvas):
         """
         self.rows = rows
         self.best = best
+        self.configure(height=self.ROW * len(rows) + self.BEST)
         self.draw()
 
     def draw(self):
@@ -973,7 +975,7 @@ class WeatherRates(tk.Canvas):
                            fade(accent if rate >= 0 else CRITICAL_TEXT))
             self.create_text(w, y, text=format_isk(totals.isk_per_hour) if totals else "—", anchor="e",
                              fill=fade(INK), font=("TkDefaultFont", 12, "bold"))
-        self.create_text(0, self.ROW * len(self.rows) + 18, text=self.best, anchor="w", fill=t.soft,
+        self.create_text(0, self.ROW * len(self.rows) + self.BEST / 2, text=self.best, anchor="w", fill=t.soft,
                          font=("TkDefaultFont", 11))
 
     def _pill(self, x0, x1, y, color):

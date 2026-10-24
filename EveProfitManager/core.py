@@ -137,7 +137,7 @@ class Totals:
     minutes: float
     runs: int
     sessions: int
-    wins: int = 0  # sessions that ended in profit
+    wins: int  # sessions that ended in profit
 
     @property
     def isk_per_hour(self):
@@ -545,6 +545,7 @@ _SESSION_QUERY = (
     "COALESCE(SUM(r.count), 0) AS run_count FROM sessions s LEFT JOIN runs r ON r.session_id = s.id"
 )
 
+
 def _totals_query(where, group=None):
     """
     SQL for totals over per-session sums, so a session with a positive total counts as a win.
@@ -552,12 +553,15 @@ def _totals_query(where, group=None):
     Args:
         where (str): WHERE clause on the sessions table (alias s), or "".
         group (str, optional): sessions column to total by; it is selected too.
+
+    Returns:
+        str: SQL selecting profit, minutes, runs, sessions and wins.
     """
     select, group_by = (f"{group}, ", f" GROUP BY {group}") if group else ("", "")
     return (
         f"SELECT {select}COALESCE(SUM(profit), 0) AS profit, COALESCE(SUM(minutes), 0) AS minutes, "
         "COALESCE(SUM(runs), 0) AS runs, COUNT(*) AS sessions, COALESCE(SUM(profit > 0), 0) AS wins FROM ("
-        "SELECT s.*, SUM(r.profit) AS profit, SUM(r.minutes) AS minutes, SUM(r.count) AS runs "
+        "SELECT s.id, s.weather, SUM(r.profit) AS profit, SUM(r.minutes) AS minutes, SUM(r.count) AS runs "
         f"FROM sessions s JOIN runs r ON r.session_id = s.id {where} GROUP BY s.id){group_by}"
     )
 

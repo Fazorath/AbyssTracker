@@ -204,9 +204,9 @@ class TrackerTest(unittest.TestCase):
 
     def test_best_weather_is_highest_isk_per_hour(self):
         by_weather = {
-            "Electrical": Totals(profit=40, minutes=30, runs=2, sessions=1),  # 80M/hr
-            "Gamma": Totals(profit=90, minutes=60, runs=3, sessions=1),       # 90M/hr
-            None: Totals(profit=100, minutes=20, runs=1, sessions=1),         # unknown weather can't win
+            "Electrical": Totals(profit=40, minutes=30, runs=2, sessions=1, wins=1),  # 80M/hr
+            "Gamma": Totals(profit=90, minutes=60, runs=3, sessions=1, wins=1),       # 90M/hr
+            None: Totals(profit=100, minutes=20, runs=1, sessions=1, wins=1),         # unknown weather can't win
         }
         self.assertEqual(best_weather(by_weather), "Gamma")
         self.assertIsNone(best_weather({None: by_weather[None]}))
