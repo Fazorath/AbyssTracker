@@ -119,8 +119,13 @@ def accent_hover(theme):
 PRIMARY = {"fg_color": "accent", "hover_color": accent_hover, "text_color": "bg"}
 
 
-URGENCY_COLOR = {"warning": WARNING, "critical": CRITICAL_TEXT}  # timer digits; "normal" takes the accent
-TOGGLE_TEXT = {"ready": "Start timer", "running": "Pause timer", "paused": "Resume", "expired": "Resume"}
+URGENCY_COLOR = {"warning": WARNING, "critical": CRITICAL_TEXT}
+TOGGLE_TEXT = {"ready": "Start timer", "paused": "Resume", "expired": "Resume"}  # a running timer offers Pause
+
+
+def digit_color(face, theme):
+    """Colour of a timer's digits: the accent, or a warning as the countdown runs out."""
+    return URGENCY_COLOR.get(face.urgency, theme.accent)
 
 
 class FixedDigits:
@@ -253,9 +258,16 @@ class TimerPanel(tk.Canvas):
             self._render()
             self._job = self.after(250, self._tick)
 
+    def face(self):
+        return read_clock(self.countdown, self.elapsed(), self.running)
+
+    def toggle_text(self, face):
+        # A countdown past zero keeps running, so it still offers to pause
+        return "Pause timer" if self.running else TOGGLE_TEXT[face.state]
+
     def _render(self):
-        face = read_clock(self.countdown, self.elapsed(), self.running)
-        self.display.show(face.text, URGENCY_COLOR.get(face.urgency, self.theme.accent))
+        face = self.face()
+        self.display.show(face.text, digit_color(face, self.theme))
         if face.state == "expired":
             hint = "Timer expired"
         elif self.theme.hint:
@@ -265,7 +277,7 @@ class TimerPanel(tk.Canvas):
         else:
             hint = "Start when you enter" if self.countdown else "Start when the site starts"
         self.itemconfigure(self.hint, text=hint)
-        self.toggle_btn.configure(text=TOGGLE_TEXT[face.state])
+        self.toggle_btn.configure(text=self.toggle_text(face))
 
 
 class RunTile(ctk.CTkFrame):
@@ -423,6 +435,23 @@ class Painter:
 
 def logged_text(run):
     return f"Logged {signed_isk(run.profit)} in {format_minutes(run.minutes)}"
+
+
+def set_entry(entry, text):
+    """Replace an entry's text. Skips needless edits, which would hide a CTkEntry's placeholder."""
+    if entry.get() != text:
+        entry.delete(0, "end")
+        if text:
+            entry.insert(0, text)
+
+
+def style_tab(button, label, on, live, theme):
+    """Colour a tab button for the selected or unselected state; a dot marks a live session."""
+    button.configure(
+        text=label + ("  ●" if live else ""),
+        fg_color=theme.accent if on else "transparent", hover_color=accent_hover(theme) if on else theme.line,
+        text_color=theme.bg if on else theme.soft,
+    )
 
 
 class SessionPage(Painter, ctk.CTkFrame):
@@ -625,6 +654,25 @@ class SessionPage(Painter, ctk.CTkFrame):
         self.after_log()
         self.app.refresh()
         return run
+
+    def pocket_log(self, amount_text):
+        """
+        Log from the pocket overlay: its one field fills this page's and the time comes from the timer.
+
+        Returns the run, or raises ValueError and leaves this page's form as it was.
+        """
+        if self.timer.value_minutes() is None:
+            raise ValueError("Start the timer first, or expand to type the time.")
+        amount, minutes = self.pocket_fields()
+        typed = amount.get(), minutes.get()
+        set_entry(amount, amount_text)
+        set_entry(minutes, "")
+        try:
+            return self.submit()
+        except ValueError:
+            set_entry(amount, typed[0])
+            set_entry(minutes, typed[1])
+            raise
 
     def timer_or(self, entry, field):
         """Value typed in a time entry, or the timer's value when the entry is blank."""
@@ -1428,8 +1476,8 @@ class PocketOverlay(Painter, ctk.CTkToplevel):
         self.theme = None
         self._message_job = None
         self._tick_job = None
-        live = next((k for k in (ABYSS, INCURSION) if app.pages[k].session_id), ABYSS)
-        self.kind = app.current if app.current in (ABYSS, INCURSION) else live
+        with_session = next((k for k in (ABYSS, INCURSION) if app.pages[k].session_id), ABYSS)
+        self.kind = app.current if app.current in (ABYSS, INCURSION) else with_session
 
         self.title("Abyss Tracker")
         self.resizable(False, False)
@@ -1500,7 +1548,7 @@ class PocketOverlay(Painter, ctk.CTkToplevel):
         self.amount_label = self.paint(ctk.CTkLabel(form, text="", font=font(12), height=18), text_color="soft")
         self.amount_label.pack(anchor="w", padx=14, pady=(12, 0))
         self.amount = self.paint(ctk.CTkEntry(form, height=46, font=font(20, "bold"), text_color=INK,
-                                              placeholder_text="e.g. 1,281"),
+                                              placeholder_text="million ISK"),
                                  fg_color="bg", border_color="line")
         self.amount.pack(fill="x", padx=14, pady=(4, 0))
         self.amount.bind("<Return>", lambda _e: self.log())
@@ -1567,14 +1615,8 @@ class PocketOverlay(Painter, ctk.CTkToplevel):
         if page.theme != self.theme:
             self.theme = page.theme
             self.repaint(self.theme)
-        t = self.theme
         for kind, btn in self.tabs.items():
-            on = kind == self.kind
-            btn.configure(
-                text=KIND_NAME[kind] + ("  ●" if self.app.pages[kind].session_id else ""),
-                fg_color=t.accent if on else "transparent", hover_color=accent_hover(t) if on else t.line,
-                text_color=t.bg if on else t.soft,
-            )
+            style_tab(btn, KIND_NAME[kind], kind == self.kind, self.app.pages[kind].session_id, self.theme)
         timer_name = "time left" if page.timer.countdown else "site time"
         session = self.app.tracker.session(page.session_id) if page.session_id else None
         if session is None:
@@ -1624,19 +1666,10 @@ class PocketOverlay(Painter, ctk.CTkToplevel):
             ctk.CTkFrame(self.runs, height=1, corner_radius=0, fg_color=self.theme.line).pack(fill="x")
 
     def log(self):
-        """Log through the page: this field fills the page's, and the time comes from the timer."""
-        page = self.page
-        if page.session_id is None:
+        if self.page.session_id is None:
             return
-        if page.timer.value_minutes() is None:
-            self.say("Start the timer first, or expand to type the time.", CRITICAL_TEXT)
-            return
-        amount, minutes = page.pocket_fields()
-        amount.delete(0, "end")
-        amount.insert(0, self.amount.get())
-        minutes.delete(0, "end")
         try:
-            run = page.submit()
+            run = self.page.pocket_log(self.amount.get())
         except ValueError as err:
             self.say(str(err), CRITICAL_TEXT)
             return
@@ -1645,11 +1678,12 @@ class PocketOverlay(Painter, ctk.CTkToplevel):
 
     def _load_amount(self):
         """Copy the page's field, e.g. the incursion payout that stays between sites."""
-        value = self.page.pocket_fields()[0].get()
-        if self.amount.get() != value:  # CTkEntry loses its placeholder on a needless delete or insert
-            self.amount.delete(0, "end")
-            if value:
-                self.amount.insert(0, value)
+        set_entry(self.amount, self.page.pocket_fields()[0].get())
+
+    def hand_back(self):
+        """Give the page a value typed here but not logged, before the full window returns."""
+        if self.amount.get():
+            set_entry(self.page.pocket_fields()[0], self.amount.get())
 
     def say(self, text, color=None):
         self.message.configure(text=text, text_color=color or self.theme.soft)
@@ -1683,11 +1717,11 @@ class PocketOverlay(Painter, ctk.CTkToplevel):
 
     def _render_clock(self):
         timer = self.page.timer
-        face = read_clock(timer.countdown, timer.elapsed(), timer.running)
-        color = URGENCY_COLOR.get(face.urgency, self.theme.accent)
+        face = timer.face()
+        color = digit_color(face, self.theme)
         self.digits.show(face.text, color)
         self.clock_state.configure(text=face.state, text_color=self.theme.soft if face.state == "ready" else color)
-        self.toggle_btn.configure(text=TOGGLE_TEXT[face.state])
+        self.toggle_btn.configure(text=timer.toggle_text(face))
         if face.share_left is None:  # the stopwatch has no end
             self.progress.pack_forget()
             return
@@ -1821,14 +1855,8 @@ class App(ctk.CTk):
         self.tab_bar.configure(fg_color=theme.panel)
         self.pocket_btn.configure(border_color=theme.line, hover_color=theme.panel)
         for name, btn in self.tabs.items():
-            on = name == self.current
             live = name in ("abyss", "incursion") and self.pages[name].session_id
-            btn.configure(
-                text=dict(self.TABS)[name] + ("  ●" if live else ""),
-                fg_color=theme.accent if on else "transparent",
-                hover_color=accent_hover(theme) if on else theme.line,
-                text_color=theme.bg if on else theme.soft,
-            )
+            style_tab(btn, dict(self.TABS)[name], name == self.current, live, theme)
 
     def refresh(self):
         """Refresh the visible page and the pocket overlay; hidden pages refresh when shown."""
@@ -1845,6 +1873,7 @@ class App(ctk.CTk):
     def leave_pocket(self):
         """Close the overlay and bring this window back."""
         if self.pocket is not None:
+            self.pocket.hand_back()
             self.pocket.destroy()
             self.pocket = None
         self.deiconify()

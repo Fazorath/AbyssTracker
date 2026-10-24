@@ -61,6 +61,34 @@ class PocketOverlayTest(unittest.TestCase):
         self.assertEqual(self.tracker.runs(self.session), [])
         self.assertIn("timer", pocket.message.cget("text"))
 
+    def test_a_bad_value_leaves_the_full_window_form_as_it_was(self):
+        page = self.app.pages["abyss"]
+        page.after_isk.insert(0, "1,200")
+        page.time_left.insert(0, "6")
+        pocket = self.enter()
+        pocket.toggle_btn.invoke()
+        pocket.amount.delete(0, "end")
+        pocket.amount.insert(0, "lots")
+        pocket.log_btn.invoke()
+        self.assertEqual(self.tracker.runs(self.session), [])
+        self.assertIn("number", pocket.message.cget("text"))
+        self.assertEqual((page.after_isk.get(), page.time_left.get()), ("1,200", "6"))
+
+    def test_expand_keeps_a_value_typed_but_not_logged(self):
+        pocket = self.enter()
+        pocket.amount.insert(0, "1,300")
+        pocket.expand_btn.invoke()
+        self.assertEqual(self.app.pages["abyss"].after_isk.get(), "1,300")
+
+    def test_a_running_timer_past_zero_still_offers_pause(self):
+        pocket = self.enter()
+        pocket.toggle_btn.invoke()
+        self.app.pages["abyss"].timer.elapsed_before = 21 * 60
+        self.app.after(300)  # wait out a tick of both timers
+        self.app.update()
+        self.assertEqual(pocket.toggle_btn.cget("text"), "Pause timer")
+        self.assertEqual(self.app.pages["abyss"].timer.toggle_btn.cget("text"), "Pause timer")
+
     def test_pin_button_toggles_always_on_top(self):
         # Without a window manager (Xvfb), -topmost can't be cleared, so read the overlay's own state
         pocket = self.enter()
