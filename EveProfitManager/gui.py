@@ -86,8 +86,8 @@ def profit_color(millions):
     return GOOD_TEXT if millions > 0 else CRITICAL_TEXT if millions < 0 else INK_2
 
 
-# Family for text drawn on canvases; App.use_ui_font() sets it once Tk is up
-CANVAS_FAMILY = "TkDefaultFont"
+# Font family of every widget and canvas; App.use_ui_font() sets it once Tk is up
+UI_FAMILY = "TkDefaultFont"
 
 
 def font(size=13, weight="normal"):
@@ -96,7 +96,7 @@ def font(size=13, weight="normal"):
 
 def canvas_font(size, weight="normal"):
     """Font for tk.Canvas text, in the same family as the CTk widgets."""
-    return (CANVAS_FAMILY, size, weight)
+    return (UI_FAMILY, size, weight)
 
 
 def mix(color, other, amount):
@@ -137,9 +137,10 @@ class TimerPanel(tk.Canvas):
         self.caption = self.create_text(0, 0, text="", font=canvas_font(-14))
         # One canvas item per character, each in a fixed-width cell, so the
         # proportional digits don't shift the countdown as they change
-        self.digit_font = tkfont.Font(self, family=CANVAS_FAMILY, size=-132, weight="bold")
+        self.digit_font = tkfont.Font(self, family=UI_FAMILY, size=-132, weight="bold")
         self.digit_width = max(self.digit_font.measure(d) for d in "0123456789")
         self.display = []
+        self.display_at = (0, 0)  # centre of the countdown, set by _layout
         self.hint = self.create_text(0, 0, text="", font=canvas_font(-15))
         self.buttons = ctk.CTkFrame(self)
         self.toggle_btn = ctk.CTkButton(self.buttons, text="Start", width=140, height=46, font=font(16, "bold"),
@@ -204,6 +205,7 @@ class TimerPanel(tk.Canvas):
             r = share * h
             self.coords(ring, cx - r, cy - r, cx + r, cy + r)
         self.coords(self.caption, cx, cy - 100)
+        self.display_at = (cx, cy - 18)
         self._place_display()
         self.coords(self.hint, cx, cy + 62)
         self.coords(self.button_window, cx, cy + 122)
@@ -218,11 +220,12 @@ class TimerPanel(tk.Canvas):
         self._place_display()
 
     def _place_display(self):
-        widths = [self.digit_width if self.itemcget(item, "text").isdigit()
-                  else self.digit_font.measure(self.itemcget(item, "text")) for item in self.display]
-        x = self.winfo_width() / 2 - sum(widths) / 2
+        chars = [self.itemcget(item, "text") for item in self.display]
+        widths = [self.digit_width if c.isdigit() else self.digit_font.measure(c) for c in chars]
+        cx, y = self.display_at
+        x = cx - sum(widths) / 2
         for item, width in zip(self.display, widths):
-            self.coords(item, x + width / 2, self.winfo_height() / 2 - 18)
+            self.coords(item, x + width / 2, y)
             x += width
 
     def _tick(self):
@@ -1293,10 +1296,10 @@ class App(ctk.CTk):
         it did not load. Runs before any widget exists, as CTkFont reads the
         default family when each font is created.
         """
-        global CANVAS_FAMILY
+        global UI_FAMILY
         fallback = tkfont.nametofont("TkDefaultFont", root=self).actual("family")
-        CANVAS_FAMILY = ui_family(tkfont.families(self), fallback)
-        ctk.ThemeManager.theme["CTkFont"]["family"] = CANVAS_FAMILY
+        UI_FAMILY = ui_family(tkfont.families(self), fallback)
+        ctk.ThemeManager.theme["CTkFont"]["family"] = UI_FAMILY
 
     def set_icon(self):
         """Window and taskbar icon: .ico on Windows, PNG elsewhere."""

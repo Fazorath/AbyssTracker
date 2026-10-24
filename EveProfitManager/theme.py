@@ -22,6 +22,8 @@ def asset_path(name):
 # UI typeface, bundled under the SIL Open Font License (assets/fonts/OFL.txt)
 FONT_FAMILY = "Chakra Petch"
 FONT_FILES = [asset_path("fonts/ChakraPetch-Regular.ttf"), asset_path("fonts/ChakraPetch-Bold.ttf")]
+FR_PRIVATE = 0x10  # Windows: visible to this process only, but still listed by Tk
+CT_PROCESS_SCOPE = 1  # macOS: kCTFontManagerScopeProcess
 
 
 def load_fonts():
@@ -35,14 +37,13 @@ def load_fonts():
         family when this fails, so the UI decides with ui_family().
     """
     try:
-        return all(_register_font(path) for path in FONT_FILES)
+        return all([_register_font(path) for path in FONT_FILES])  # try every file
     except (OSError, AttributeError):  # missing system library or symbol
         return False
 
 
 def _register_font(path):
     if sys.platform == "win32":
-        FR_PRIVATE = 0x10  # visible to this process only, but still listed by Tk
         return ctypes.windll.gdi32.AddFontResourceExW(path, FR_PRIVATE, 0) > 0
 
     if sys.platform == "darwin":
@@ -59,8 +60,7 @@ def _register_font(path):
         if not url:
             return False
         try:
-            PROCESS_SCOPE = 1  # kCTFontManagerScopeProcess
-            return ct.CTFontManagerRegisterFontsForURL(url, PROCESS_SCOPE, None)
+            return ct.CTFontManagerRegisterFontsForURL(url, CT_PROCESS_SCOPE, None)
         finally:
             cf.CFRelease(url)
 

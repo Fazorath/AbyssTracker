@@ -50,12 +50,13 @@ class ThemeTest(unittest.TestCase):
         self.assertEqual(ui_family((), "Roboto"), "Roboto")
 
     def test_load_fonts_makes_chakra_petch_available_to_tk(self):
-        self.assertTrue(load_fonts())
+        loaded = load_fonts()
         try:
             root = tkinter.Tk()
         except tkinter.TclError as err:  # no display, e.g. headless Linux CI
             self.skipTest(f"Tk cannot open a window: {err}")
         try:
+            self.assertTrue(loaded)
             self.assertIn(FONT_FAMILY, tkinter.font.families(root))
         finally:
             root.destroy()
