@@ -4,7 +4,7 @@ from datetime import datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from core import ABYSS, INCURSION, Tracker, isk_per_hour, parse_sessions_txt
+from core import ABYSS, INCURSION, Totals, Tracker, best_weather, isk_per_hour, parse_sessions_txt
 
 OLD_FILE = """Abyss Details!
 
@@ -189,6 +189,28 @@ class TrackerTest(unittest.TestCase):
         self.assertEqual((gamma.profit, gamma.minutes, gamma.runs, gamma.sessions), (90, 35, 2, 2))
         self.assertAlmostEqual(by_weather["Electrical"].isk_per_hour, 120)
         self.assertEqual(by_weather[None].profit, 10)
+
+    def test_winning_sessions_count_session_profit(self):
+        for wallets in ((100, 150, 120), (100, 80, 130), (100, 90)):  # +20, +30 with a losing run, -10
+            sid = self.tracker.start_session(ABYSS, starting_isk=wallets[0])
+            for before, after in zip(wallets, wallets[1:]):
+                self.tracker.log_abyss_run(sid, before, after, time_left=5)
+        inc = self.tracker.start_session(INCURSION)
+        self.tracker.log_incursion_site(inc, 0, 10)  # break-even isn't a win
+
+        self.assertEqual((self.tracker.totals().wins, self.tracker.totals().sessions), (2, 4))
+        self.assertEqual(self.tracker.totals(INCURSION).wins, 0)
+        self.assertEqual(self.tracker.totals_by_weather()[None].wins, 2)
+
+    def test_best_weather_is_highest_isk_per_hour(self):
+        by_weather = {
+            "Electrical": Totals(profit=40, minutes=30, runs=2, sessions=1),  # 80M/hr
+            "Gamma": Totals(profit=90, minutes=60, runs=3, sessions=1),       # 90M/hr
+            None: Totals(profit=100, minutes=20, runs=1, sessions=1),         # unknown weather can't win
+        }
+        self.assertEqual(best_weather(by_weather), "Gamma")
+        self.assertIsNone(best_weather({None: by_weather[None]}))
+        self.assertIsNone(best_weather({}))
 
     def test_settings(self):
         self.assertEqual(self.tracker.get_setting("x", "d"), "d")

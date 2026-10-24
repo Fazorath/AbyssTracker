@@ -137,10 +137,25 @@ class Totals:
     minutes: float
     runs: int
     sessions: int
+    wins: int = 0  # sessions that ended in profit
 
     @property
     def isk_per_hour(self):
         return isk_per_hour(self.profit, self.minutes)
+
+
+def best_weather(by_weather):
+    """
+    The weather with the highest ISK/hour.
+
+    Args:
+        by_weather (dict): Totals keyed by weather, as from Tracker.totals_by_weather().
+
+    Returns:
+        str | None: The weather, or None if no known weather has runs.
+    """
+    known = [w for w in by_weather if w is not None]
+    return max(known, key=lambda w: by_weather[w].isk_per_hour, default=None)
 
 
 class Tracker:
@@ -368,12 +383,7 @@ class Tracker:
     def totals(self, kind=None):
         """Lifetime totals, optionally for one kind."""
         where, args = ("WHERE s.kind = ?", (kind,)) if kind else ("", ())
-        row = self.db.execute(
-            "SELECT COALESCE(SUM(r.profit), 0) AS profit, COALESCE(SUM(r.minutes), 0) AS minutes, "
-            "COALESCE(SUM(r.count), 0) AS runs, COUNT(DISTINCT s.id) AS sessions "
-            f"FROM sessions s JOIN runs r ON r.session_id = s.id {where}",
-            args,
-        ).fetchone()
+        row = self.db.execute(_totals_query(where), args).fetchone()
         return _totals(row)
 
     def totals_by_weather(self):
@@ -385,10 +395,7 @@ class Tracker:
             have no weather recorded under None at the end.
         """
         rows = self.db.execute(
-            "SELECT s.weather, SUM(r.profit) AS profit, SUM(r.minutes) AS minutes, "
-            "SUM(r.count) AS runs, COUNT(DISTINCT s.id) AS sessions "
-            "FROM sessions s JOIN runs r ON r.session_id = s.id WHERE s.kind = ? GROUP BY s.weather",
-            (ABYSS,),
+            _totals_query("WHERE s.kind = ?", "weather"), (ABYSS,)
         ).fetchall()
         found = {r["weather"]: _totals(r) for r in rows}
         return {w: found[w] for w in (*WEATHERS, None) if w in found}
@@ -538,6 +545,22 @@ _SESSION_QUERY = (
     "COALESCE(SUM(r.count), 0) AS run_count FROM sessions s LEFT JOIN runs r ON r.session_id = s.id"
 )
 
+def _totals_query(where, group=None):
+    """
+    SQL for totals over per-session sums, so a session with a positive total counts as a win.
+
+    Args:
+        where (str): WHERE clause on the sessions table (alias s), or "".
+        group (str, optional): sessions column to total by; it is selected too.
+    """
+    select, group_by = (f"{group}, ", f" GROUP BY {group}") if group else ("", "")
+    return (
+        f"SELECT {select}COALESCE(SUM(profit), 0) AS profit, COALESCE(SUM(minutes), 0) AS minutes, "
+        "COALESCE(SUM(runs), 0) AS runs, COUNT(*) AS sessions, COALESCE(SUM(profit > 0), 0) AS wins FROM ("
+        "SELECT s.*, SUM(r.profit) AS profit, SUM(r.minutes) AS minutes, SUM(r.count) AS runs "
+        f"FROM sessions s JOIN runs r ON r.session_id = s.id {where} GROUP BY s.id){group_by}"
+    )
+
 
 def _session(row):
     return Session(
@@ -556,7 +579,7 @@ def _session(row):
 
 
 def _totals(row):
-    return Totals(row["profit"], row["minutes"], row["runs"], row["sessions"])
+    return Totals(row["profit"], row["minutes"], row["runs"], row["sessions"], row["wins"])
 
 
 def _run(row):
