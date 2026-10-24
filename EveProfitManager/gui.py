@@ -102,6 +102,7 @@ def mix(color, other, amount):
 
 
 def accent_hover(theme):
+    """Hover colour for accent-filled buttons."""
     return mix(theme.accent, theme.bg, 0.2)
 
 
@@ -121,6 +122,10 @@ class StatCard(ctk.CTkFrame):
     def set(self, value, color=INK, sub=""):
         self.value.configure(text=value, text_color=color)
         self.sub.configure(text=sub)
+
+
+# paint() options for accent-filled buttons
+PRIMARY = {"fg_color": "accent", "hover_color": accent_hover, "text_color": "bg"}
 
 
 class TimerPanel(tk.Canvas):
@@ -478,7 +483,7 @@ class SessionPage(ctk.CTkFrame):
         self.paint(
             ctk.CTkButton(inner, text="Start session", height=40, width=180, font=font(14, "bold"),
                           command=self.start_session),
-            fg_color="accent", hover_color=accent_hover, text_color="bg",
+            **PRIMARY,
         ).pack(anchor="w", pady=(20, 0))
         self.start_message = ctk.CTkLabel(inner, text="", text_color=CRITICAL_TEXT, font=font(12))
         self.start_message.pack(anchor="w", pady=(8, 0))
@@ -506,7 +511,7 @@ class SessionPage(ctk.CTkFrame):
         self.paint(
             ctk.CTkButton(self.log_form, text=f"Log {self.unit}  ⏎", height=36, width=120, font=font(14, "bold"),
                           command=self.log),
-            fg_color="accent", hover_color=accent_hover, text_color="bg",
+            **PRIMARY,
         ).grid(row=1, column=len(self.entries()), sticky="w", pady=(2, 0))
         self.message = ctk.CTkLabel(form_card, text="", font=font(12), height=18)
         self.message.pack(anchor="w", padx=14, pady=(4, 8))
@@ -535,7 +540,7 @@ class SessionPage(ctk.CTkFrame):
     def log_run(self): ...
     def update_stats(self, session, runs): ...
     def timer_caption(self, session): return ""
-    def lifetime_totals(self, session): ...
+    def lifetime_totals(self, session): return "", None
     def idle_theme(self): return theme_for(self.kind, None)
     def after_log(self): ...
     def edit_fields(self, run): return []
