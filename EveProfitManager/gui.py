@@ -26,6 +26,7 @@ from core import (
     isk_per_hour,
     tier_label,
 )
+from clock import read_clock
 from wallet import get_wallet
 from account import SIGN_IN_ERRORS, Account
 from theme import NEUTRAL_THEME, asset_path, load_fonts, theme_for, ui_family
@@ -118,6 +119,48 @@ def accent_hover(theme):
 PRIMARY = {"fg_color": "accent", "hover_color": accent_hover, "text_color": "bg"}
 
 
+URGENCY_COLOR = {"warning": WARNING, "critical": CRITICAL_TEXT}
+TOGGLE_TEXT = {"ready": "Start timer", "paused": "Resume", "expired": "Resume"}  # a running timer offers Pause
+
+
+def digit_color(face, theme):
+    """Colour of a timer's digits: the accent, or a warning as the countdown runs out."""
+    return URGENCY_COLOR.get(face.urgency, theme.accent)
+
+
+class FixedDigits:
+    """
+    Bold text drawn on a canvas one item per character, each digit in a
+    fixed-width cell, so proportional digits don't shift as they change.
+    """
+
+    def __init__(self, canvas, size, align="center"):
+        self.canvas = canvas
+        self.align = align  # the x given to place() is the text's centre, or its left edge for "left"
+        self.font = tkfont.Font(canvas, family=UI_FAMILY, size=size, weight="bold")
+        self.digit_width = max(self.font.measure(d) for d in "0123456789")
+        self.items = []
+        self.at = (0, 0)
+
+    def show(self, text, color):
+        while len(self.items) < len(text):
+            self.items.append(self.canvas.create_text(0, 0, font=self.font))
+        while len(self.items) > len(text):
+            self.canvas.delete(self.items.pop())
+        for item, char in zip(self.items, text):
+            self.canvas.itemconfigure(item, text=char, fill=color)
+        self.place(*self.at)
+
+    def place(self, x, y):
+        self.at = (x, y)
+        chars = [self.canvas.itemcget(item, "text") for item in self.items]
+        widths = [self.digit_width if c.isdigit() else self.font.measure(c) for c in chars]
+        x = x if self.align == "left" else x - sum(widths) / 2
+        for item, width in zip(self.items, widths):
+            self.canvas.coords(item, x + width / 2, y)
+            x += width
+
+
 class TimerPanel(tk.Canvas):
     """
     A countdown (for the abyssal timer) or a stopwatch (for incursion sites), drawn
@@ -138,12 +181,7 @@ class TimerPanel(tk.Canvas):
 
         self.rings = [self.create_oval(0, 0, 0, 0, width=1, dash=dash or ()) for _, dash in self.RINGS]
         self.caption = self.create_text(0, 0, text="", font=canvas_font(-14))
-        # One canvas item per character, each in a fixed-width cell, so the
-        # proportional digits don't shift the countdown as they change
-        self.digit_font = tkfont.Font(self, family=UI_FAMILY, size=-132, weight="bold")
-        self.digit_width = max(self.digit_font.measure(d) for d in "0123456789")
-        self.display = []
-        self.display_at = (0, 0)  # centre of the countdown, set by _layout
+        self.display = FixedDigits(self, -132)
         self.hint = self.create_text(0, 0, text="", font=canvas_font(-15))
         self.buttons = ctk.CTkFrame(self)
         self.toggle_btn = ctk.CTkButton(self.buttons, text="Start", width=140, height=46, font=font(16, "bold"),
@@ -208,28 +246,9 @@ class TimerPanel(tk.Canvas):
             r = share * h
             self.coords(ring, cx - r, cy - r, cx + r, cy + r)
         self.coords(self.caption, cx, cy - 100)
-        self.display_at = (cx, cy - 18)
-        self._place_display()
+        self.display.place(cx, cy - 18)
         self.coords(self.hint, cx, cy + 62)
         self.coords(self.button_window, cx, cy + 122)
-
-    def _show_display(self, text, color):
-        while len(self.display) < len(text):
-            self.display.append(self.create_text(0, 0, font=self.digit_font))
-        while len(self.display) > len(text):
-            self.delete(self.display.pop())
-        for item, char in zip(self.display, text):
-            self.itemconfigure(item, text=char, fill=color)
-        self._place_display()
-
-    def _place_display(self):
-        chars = [self.itemcget(item, "text") for item in self.display]
-        widths = [self.digit_width if c.isdigit() else self.digit_font.measure(c) for c in chars]
-        cx, y = self.display_at
-        x = cx - sum(widths) / 2
-        for item, width in zip(self.display, widths):
-            self.coords(item, x + width / 2, y)
-            x += width
 
     def _tick(self):
         if self._job:
@@ -239,28 +258,26 @@ class TimerPanel(tk.Canvas):
             self._render()
             self._job = self.after(250, self._tick)
 
-    def _render(self):
-        elapsed = self.elapsed()
-        seconds = max(0.0, self.countdown - elapsed) if self.countdown else elapsed
-        mins, secs = divmod(int(seconds + (0.999 if self.countdown else 0)), 60)
-        color = self.theme.accent
-        if self.countdown and elapsed > 0:
-            if seconds < 120:
-                color = CRITICAL_TEXT
-            elif seconds < 300:
-                color = WARNING
-        self._show_display(f"{mins:02d}:{secs:02d}", color)
+    def face(self):
+        return read_clock(self.countdown, self.elapsed(), self.running)
 
-        if self.countdown and elapsed > 0 and seconds <= 0:
+    def toggle_text(self, face):
+        # A countdown past zero keeps running, so it still offers to pause
+        return "Pause timer" if self.running else TOGGLE_TEXT[face.state]
+
+    def _render(self):
+        face = self.face()
+        self.display.show(face.text, digit_color(face, self.theme))
+        if face.state == "expired":
             hint = "Timer expired"
         elif self.theme.hint:
             hint = self.theme.hint
-        elif elapsed > 0:
+        elif face.state != "ready":
             hint = "Leave the time field blank to use this"
         else:
             hint = "Start when you enter" if self.countdown else "Start when the site starts"
         self.itemconfigure(self.hint, text=hint)
-        self.toggle_btn.configure(text="Pause timer" if self.running else ("Resume" if elapsed > 0 else "Start timer"))
+        self.toggle_btn.configure(text=self.toggle_text(face))
 
 
 class RunTile(ctk.CTkFrame):
@@ -392,7 +409,52 @@ class EditRunDialog(ctk.CTkToplevel):
         self.destroy()
 
 
-class SessionPage(ctk.CTkFrame):
+class Painter:
+    """Mixin for a window part whose widgets recolour with the Filament theme; set self.painters = []."""
+
+    def paint(self, widget, **options):
+        """
+        Recolour a widget whenever the theme changes.
+
+        Args:
+            widget: The widget to colour.
+            **options: configure() options, each a Theme field name or a function of the theme.
+
+        Returns:
+            The widget.
+        """
+        self.painters.append(lambda t: widget.configure(
+            **{k: v(t) if callable(v) else getattr(t, v) for k, v in options.items()}
+        ))
+        return widget
+
+    def repaint(self, theme):
+        for painter in self.painters:
+            painter(theme)
+
+
+def logged_text(run):
+    return f"Logged {signed_isk(run.profit)} in {format_minutes(run.minutes)}"
+
+
+def set_entry(entry, text):
+    """Replace an entry's text. Skips needless edits, which would hide a CTkEntry's placeholder."""
+    if entry.get() != text:
+        entry.delete(0, "end")
+        if text:
+            entry.insert(0, text)
+
+
+def style_tab(button, label, on, live, theme):
+    """Colour a tab button for the selected or unselected state; a dot marks a live session."""
+    button.configure(
+        text=label + ("  ●" if live else ""),
+        fg_color=theme.accent if on else "transparent", hover_color=accent_hover(theme) if on else theme.line,
+        text_color=theme.bg if on else theme.soft,
+    )
+
+
+class SessionPage(Painter, ctk.CTkFrame):
     """
     Shared layout for the Abyss and Incursion pages: a start screen and a live session
     screen, coloured by the session's Filament theme.
@@ -401,6 +463,7 @@ class SessionPage(ctk.CTkFrame):
     kind = None
     subtitle = ""
     unit = "run"
+    pocket_label = ""  # label of the pocket overlay's one field
 
     def __init__(self, master, app):
         super().__init__(master, fg_color="transparent")
@@ -501,32 +564,16 @@ class SessionPage(ctk.CTkFrame):
     def after_log(self): ...
     def edit_fields(self, run): return []
     def save_edit(self, run, *values): ...
+    def pocket_fields(self): return None, None  # (entry the overlay's field fills, time entry it leaves blank)
 
     # --- shared behaviour -------------------------------------------------
-
-    def paint(self, widget, **options):
-        """
-        Recolour a widget whenever the theme changes.
-
-        Args:
-            widget: The widget to colour.
-            **options: configure() options, each a Theme field name or a function of the theme.
-
-        Returns:
-            The widget.
-        """
-        self.painters.append(lambda t: widget.configure(
-            **{k: v(t) if callable(v) else getattr(t, v) for k, v in options.items()}
-        ))
-        return widget
 
     def set_theme(self, theme):
         """Recolour the page, and the app around it when the page is showing."""
         if theme == self.theme:
             return
         self.theme = theme
-        for painter in self.painters:
-            painter(theme)
+        self.repaint(theme)
         self.timer.set_theme(theme)
         if self.winfo_manager():
             self.app.apply_theme(theme)
@@ -590,21 +637,42 @@ class SessionPage(ctk.CTkFrame):
     def log(self):
         if self.session_id is None:
             return
-        self.used_timer = False
         try:
-            run = self.log_run()
+            run = self.submit()
         except ValueError as err:
             self.flash(str(err), CRITICAL_TEXT)
             return
+        self.flash(logged_text(run), profit_color(run.profit))
+        self.entries()[0].focus_set()
+
+    def submit(self):
+        """Log the run or site in the form and return it; raises ValueError for a bad value."""
+        self.used_timer = False
+        run = self.log_run()
         if self.used_timer:  # a typed time leaves a running timer alone
             self.timer.reset()
         self.after_log()
-        self.flash(
-            f"Logged {signed_isk(run.profit)} in {format_minutes(run.minutes)}",
-            profit_color(run.profit),
-        )
         self.app.refresh()
-        self.entries()[0].focus_set()
+        return run
+
+    def pocket_log(self, amount_text):
+        """
+        Log from the pocket overlay: its one field fills this page's and the time comes from the timer.
+
+        Returns the run, or raises ValueError and leaves this page's form as it was.
+        """
+        if self.timer.value_minutes() is None:
+            raise ValueError("Start the timer first, or expand to type the time.")
+        amount, minutes = self.pocket_fields()
+        typed = amount.get(), minutes.get()
+        set_entry(amount, amount_text)
+        set_entry(minutes, "")
+        try:
+            return self.submit()
+        except ValueError:
+            set_entry(amount, typed[0])
+            set_entry(minutes, typed[1])
+            raise
 
     def timer_or(self, entry, field):
         """Value typed in a time entry, or the timer's value when the entry is blank."""
@@ -699,6 +767,7 @@ class AbyssPage(SessionPage):
         "wallet total and the time left on the 20-minute timer, or run the built-in timer and leave the time blank."
     )
     unit = "run"
+    pocket_label = "Wallet after run (M)"
 
     def build_start_form(self, frame):
         self.start_isk = self.field(frame, 0, "Wallet now (million ISK)", 220, "e.g. 1,250 or 1.25b")
@@ -766,6 +835,9 @@ class AbyssPage(SessionPage):
     def entries(self):
         return [self.after_isk, self.time_left]
 
+    def pocket_fields(self):
+        return self.after_isk, self.time_left
+
     def stat_labels(self):
         return [("profit", "Session"), ("rate", "ISK/hr"), ("time", "Time"), ("wallet", "Wallet")]
 
@@ -821,6 +893,7 @@ class IncursionPage(SessionPage):
         "or run the stopwatch and leave the time blank."
     )
     unit = "site"
+    pocket_label = "Payout (M)"
 
     def build_start_form(self, frame):
         self.per_site = self.field(frame, 0, "Payout per site (million ISK)", 240, "e.g. 31")
@@ -838,6 +911,9 @@ class IncursionPage(SessionPage):
 
     def entries(self):
         return [self.minutes, self.payout]
+
+    def pocket_fields(self):
+        return self.payout, self.minutes
 
     def stat_labels(self):
         return [("profit", "Session"), ("rate", "ISK/hr"), ("time", "Time"), ("avg", "Avg site")]
@@ -1382,6 +1458,286 @@ class SettingsPage(ctk.CTkFrame):
         self.app.run_async(self.app.account.sign_out, done)  # revoking calls the network
 
 
+class PocketOverlay(Painter, ctk.CTkToplevel):
+    """
+    A small always-on-top window to keep beside the EVE client: the timer, one field
+    and the Log button, the session's key numbers and its last few runs.
+
+    It drives the Abyss and Incursion pages, so it shares their timers, forms and
+    sessions with the full window.
+    """
+
+    RECENT = 3  # runs listed
+
+    def __init__(self, app):
+        super().__init__(app)
+        self.app = app
+        self.painters = []
+        self.theme = None
+        self._message_job = None
+        self._tick_job = None
+        with_session = next((k for k in (ABYSS, INCURSION) if app.pages[k].session_id), ABYSS)
+        self.kind = app.current if app.current in (ABYSS, INCURSION) else with_session
+
+        self.title("Abyss Tracker")
+        self.resizable(False, False)
+        self.minsize(380, 0)
+        self.pinned = True  # always on top
+        self.attributes("-topmost", True)
+        self.protocol("WM_DELETE_WINDOW", app.leave_pocket)
+        if sys.platform == "win32":  # CTkToplevel sets its own icon after 200 ms
+            self.after(250, lambda: self.iconbitmap(asset_path("icon.ico")))
+        self.paint(self, fg_color="bg")
+        body = ctk.CTkFrame(self, fg_color="transparent")
+        body.pack(fill="both", expand=True, padx=14, pady=14)
+
+        # Header: activity tabs, then pin and expand on the right
+        header = ctk.CTkFrame(body, fg_color="transparent")
+        header.pack(fill="x")
+        tab_bar = self.paint(ctk.CTkFrame(header, corner_radius=10), fg_color="panel")
+        tab_bar.pack(side="left")
+        self.tabs = {}
+        for i, kind in enumerate((ABYSS, INCURSION)):
+            self.tabs[kind] = ctk.CTkButton(tab_bar, text=KIND_NAME[kind], width=0, height=34, corner_radius=8,
+                                            font=font(13, "bold"), command=lambda k=kind: self.switch(k))
+            self.tabs[kind].pack(side="left", padx=(3, 3 if i else 0), pady=3)
+        self.expand_btn = self.paint(
+            ctk.CTkButton(header, text="Expand", width=0, height=40, font=font(13), command=app.leave_pocket),
+            fg_color="panel", hover_color="line", text_color="soft",
+        )
+        self.expand_btn.pack(side="right")
+        self.pin_btn = ctk.CTkButton(header, text="", width=0, height=40, font=font(13, "bold"),
+                                     command=self.toggle_pin)
+        self.pin_btn.pack(side="right", padx=(0, 6))
+        self.painters.append(lambda _t: self._show_pin())
+
+        # Timer: caption and state, the countdown, time left, start/pause and reset
+        timer_card = self.paint(ctk.CTkFrame(body, corner_radius=16), fg_color="panel")
+        timer_card.pack(fill="x", pady=(12, 0))
+        top = ctk.CTkFrame(timer_card, fg_color="transparent")
+        top.pack(fill="x", padx=18, pady=(14, 0))
+        self.caption = self.paint(ctk.CTkLabel(top, text="", font=font(12), height=18), text_color="soft")
+        self.caption.pack(side="left")
+        self.clock_state = ctk.CTkLabel(top, text="", font=font(12), height=18)
+        self.clock_state.pack(side="right")
+        self.clock = self.paint(tk.Canvas(timer_card, height=84, highlightthickness=0), bg="panel")
+        self.clock.pack(fill="x", padx=18)
+        self.digits = FixedDigits(self.clock, -76, align="left")
+        self.digits.place(0, 44)
+        self.progress = self.paint(ctk.CTkProgressBar(timer_card, height=6, corner_radius=3), fg_color="line")
+        self.timer_buttons = ctk.CTkFrame(timer_card, fg_color="transparent")
+        self.timer_buttons.pack(fill="x", padx=18, pady=(0, 18))
+        self.timer_buttons.grid_columnconfigure((0, 1), weight=1, uniform="timer")
+        self.toggle_btn = self.paint(
+            ctk.CTkButton(self.timer_buttons, text="", height=44, font=font(14, "bold"), text_color=INK,
+                          command=self.toggle_timer),
+            fg_color="line", hover_color=lambda t: mix(t.line, INK, 0.15),
+        )
+        self.toggle_btn.grid(row=0, column=0, sticky="ew", padx=(0, 4))
+        self.reset_btn = self.paint(
+            ctk.CTkButton(self.timer_buttons, text="Reset", height=44, font=font(14), fg_color="transparent",
+                          border_width=1, command=self.reset_timer),
+            border_color="line", hover_color="line", text_color="soft",
+        )
+        self.reset_btn.grid(row=0, column=1, sticky="ew", padx=(4, 0))
+
+        # Live session: the field and Log button, three numbers, the last runs
+        self.live = ctk.CTkFrame(body, fg_color="transparent")
+        form = self.paint(ctk.CTkFrame(self.live, corner_radius=16), fg_color="panel")
+        form.pack(fill="x", pady=(12, 0))
+        self.amount_label = self.paint(ctk.CTkLabel(form, text="", font=font(12), height=18), text_color="soft")
+        self.amount_label.pack(anchor="w", padx=14, pady=(12, 0))
+        self.amount = self.paint(ctk.CTkEntry(form, height=46, font=font(20, "bold"), text_color=INK,
+                                              placeholder_text="million ISK"),
+                                 fg_color="bg", border_color="line")
+        self.amount.pack(fill="x", padx=14, pady=(4, 0))
+        self.amount.bind("<Return>", lambda _e: self.log())
+        self.log_btn = self.paint(
+            ctk.CTkButton(form, text="", height=50, corner_radius=12, font=font(16, "bold"), command=self.log),
+            **PRIMARY,
+        )
+        self.log_btn.pack(fill="x", padx=14, pady=(10, 0))
+        self.message = ctk.CTkLabel(form, text="", font=font(12), height=18, wraplength=330, justify="left")
+        self.message.pack(anchor="w", padx=14, pady=(4, 8))
+
+        stats = ctk.CTkFrame(self.live, fg_color="transparent")
+        stats.pack(fill="x", pady=(12, 0))
+        stats.grid_columnconfigure((0, 1, 2), weight=1, uniform="stat")
+        self.stats = []
+        for i in range(3):
+            tile = self.paint(ctk.CTkFrame(stats, corner_radius=12), fg_color="panel")
+            tile.grid(row=0, column=i, sticky="ew", padx=(0 if i == 0 else 4, 0 if i == 2 else 4))
+            label = self.paint(ctk.CTkLabel(tile, text="", font=font(11), height=16), text_color="soft")
+            label.pack(anchor="w", padx=12, pady=(10, 0))
+            value = ctk.CTkLabel(tile, text="", font=font(20, "bold"), height=26)
+            value.pack(anchor="w", padx=12, pady=(0, 10))
+            self.stats.append((label, value))
+
+        runs_card = self.paint(ctk.CTkFrame(self.live, corner_radius=16), fg_color="panel")
+        runs_card.pack(fill="x", pady=(12, 0))
+        self.runs = ctk.CTkFrame(runs_card, fg_color="transparent")
+        self.runs.pack(fill="x", padx=14, pady=(6, 0))
+        footer = ctk.CTkFrame(runs_card, fg_color="transparent")
+        footer.pack(fill="x", padx=14, pady=(6, 10))
+        self.session_total = self.paint(ctk.CTkLabel(footer, text="", font=font(12), height=18), text_color="soft")
+        self.session_total.pack(side="left")
+        self.lifetime = self.paint(ctk.CTkLabel(footer, text="", font=font(12), height=18), text_color="soft")
+        self.lifetime.pack(side="right")
+
+        # No session: the full window starts one
+        self.idle = self.paint(ctk.CTkFrame(body, corner_radius=16), fg_color="panel")
+        self.idle_text = self.paint(ctk.CTkLabel(self.idle, text="", font=font(14)), text_color="soft")
+        self.idle_text.pack(anchor="w", padx=18, pady=(16, 8))
+        self.paint(
+            ctk.CTkButton(self.idle, text="Expand to start one", height=44, font=font(14, "bold"),
+                          command=app.leave_pocket),
+            **PRIMARY,
+        ).pack(anchor="w", padx=18, pady=(0, 18))
+
+        self.refresh()
+        self._load_amount()
+        self._tick()
+
+    @property
+    def page(self):
+        return self.app.pages[self.kind]
+
+    def switch(self, kind):
+        """Show the other activity here, and in the full window for when it expands."""
+        self.kind = kind
+        self.app.show(kind)
+        self.refresh()
+        self._load_amount()
+        self.say("")
+
+    def refresh(self):
+        page = self.page
+        if page.theme != self.theme:
+            self.theme = page.theme
+            self.repaint(self.theme)
+        for kind, btn in self.tabs.items():
+            style_tab(btn, KIND_NAME[kind], kind == self.kind, self.app.pages[kind].session_id, self.theme)
+        timer_name = "time left" if page.timer.countdown else "site time"
+        session = self.app.tracker.session(page.session_id) if page.session_id else None
+        if session is None:
+            self.live.pack_forget()
+            self.idle.pack(fill="x", pady=(12, 0))
+            self.idle_text.configure(text=f"No {KIND_NAME[self.kind].lower()} session running.")
+            self.caption.configure(text=timer_name.capitalize())
+            self._render_clock()
+            return
+
+        self.idle.pack_forget()
+        self.live.pack(fill="x")
+        unit = page.unit.capitalize()
+        self.caption.configure(text=f"{unit} {session.runs + 1} · {timer_name}")
+        self.amount_label.configure(text=page.pocket_label)
+        self.log_btn.configure(text=f"Log {page.unit} · uses timer")
+        for (label, value), (text, number, color) in zip(self.stats, (
+            ("Profit", signed_isk(session.profit), profit_color(session.profit)),
+            ("ISK/hr", format_isk(session.isk_per_hour), INK),
+            (f"{unit}s", str(session.runs), INK),
+        )):
+            label.configure(text=text)
+            value.configure(text=number, text_color=color)
+        self.show_runs(self.app.tracker.runs(session.id), page.unit)
+        self.session_total.configure(text=f"Session {signed_isk(session.profit)} · {format_minutes(session.minutes)}")
+        label, totals = page.lifetime_totals(session)
+        self.lifetime.configure(text=f"{label} {signed_isk(totals.profit)}" if totals else "")
+        self._render_clock()
+
+    def show_runs(self, runs, unit):
+        """The last few runs, newest first, each with its number, duration and profit."""
+        for child in self.runs.winfo_children():
+            child.destroy()
+        if not runs:
+            ctk.CTkLabel(self.runs, text=f"No {unit}s yet.", font=font(14), text_color=self.theme.soft,
+                         height=40).pack(anchor="w")
+            return
+        for number, run in list(enumerate(runs, 1))[-self.RECENT:][::-1]:
+            row = ctk.CTkFrame(self.runs, fg_color="transparent")
+            row.pack(fill="x")
+            ctk.CTkLabel(row, text=str(number), width=22, anchor="w", font=font(14), text_color=self.theme.soft,
+                         height=40).pack(side="left")
+            ctk.CTkLabel(row, text=format_minutes(run.minutes), font=font(14), text_color=INK_2,
+                         height=40).pack(side="left", padx=(8, 0))
+            ctk.CTkLabel(row, text=signed_isk(run.profit), font=font(14, "bold"), text_color=profit_color(run.profit),
+                         height=40).pack(side="right")
+            ctk.CTkFrame(self.runs, height=1, corner_radius=0, fg_color=self.theme.line).pack(fill="x")
+
+    def log(self):
+        if self.page.session_id is None:
+            return
+        try:
+            run = self.page.pocket_log(self.amount.get())
+        except ValueError as err:
+            self.say(str(err), CRITICAL_TEXT)
+            return
+        self._load_amount()
+        self.say(logged_text(run), profit_color(run.profit))
+
+    def _load_amount(self):
+        """Copy the page's field, e.g. the incursion payout that stays between sites."""
+        set_entry(self.amount, self.page.pocket_fields()[0].get())
+
+    def hand_back(self):
+        """Give the page a value typed here but not logged, before the full window returns."""
+        if self.amount.get():
+            set_entry(self.page.pocket_fields()[0], self.amount.get())
+
+    def say(self, text, color=None):
+        self.message.configure(text=text, text_color=color or self.theme.soft)
+        if self._message_job:
+            self.after_cancel(self._message_job)
+        self._message_job = self.after(5000, lambda: self.message.configure(text=""))
+
+    def toggle_pin(self):
+        # Kept here: on X11, -topmost reads back the old value until the window manager answers
+        self.pinned = not self.pinned
+        self.attributes("-topmost", self.pinned)
+        self._show_pin()
+
+    def _show_pin(self):
+        self.pin_btn.configure(
+            text="Unpin" if self.pinned else "Pin on top", fg_color=self.theme.panel, hover_color=self.theme.line,
+            text_color=self.theme.accent if self.pinned else self.theme.soft,
+        )
+
+    def toggle_timer(self):
+        self.page.timer.toggle()
+        self._render_clock()
+
+    def reset_timer(self):
+        self.page.timer.reset()
+        self._render_clock()
+
+    def _tick(self):
+        self._render_clock()
+        self._tick_job = self.after(250, self._tick)
+
+    def _render_clock(self):
+        timer = self.page.timer
+        face = timer.face()
+        color = digit_color(face, self.theme)
+        self.digits.show(face.text, color)
+        self.clock_state.configure(text=face.state, text_color=self.theme.soft if face.state == "ready" else color)
+        self.toggle_btn.configure(text=timer.toggle_text(face))
+        if face.share_left is None:  # the stopwatch has no end
+            self.progress.pack_forget()
+            return
+        if not self.progress.winfo_manager():
+            self.progress.pack(fill="x", padx=18, pady=(0, 12), before=self.timer_buttons)
+        self.progress.configure(progress_color=color)
+        self.progress.set(face.share_left)
+
+    def destroy(self):
+        if self._tick_job:
+            self.after_cancel(self._tick_job)
+        if self._message_job:
+            self.after_cancel(self._message_job)
+        super().destroy()
+
+
 class App(ctk.CTk):
     TABS = [("abyss", "Session"), ("incursion", "Incursion"), ("history", "History"), ("settings", "Settings")]
 
@@ -1409,6 +1765,10 @@ class App(ctk.CTk):
             btn.pack(side="left", padx=(3, 0 if i < len(self.TABS) - 1 else 3), pady=3)
             self.tabs[key] = btn
             self.bind(f"<Control-Key-{i + 1}>", lambda _e, k=key: self.show(k))
+        self.pocket = None  # the PocketOverlay while it replaces this window
+        self.pocket_btn = ctk.CTkButton(self.header, text="Pocket mode", width=0, height=34, fg_color="transparent",
+                                        border_width=1, text_color=INK, command=self.enter_pocket)
+        self.pocket_btn.pack(side="right", padx=(10, 0))  # page toolbars pack to its left
 
         content = ctk.CTkFrame(self, fg_color="transparent")
         content.pack(fill="both", expand=True, padx=32, pady=(18, 24))
@@ -1468,6 +1828,8 @@ class App(ctk.CTk):
 
     def bring_to_front(self):
         """macOS often opens Tk windows behind the terminal; raise and focus it."""
+        if self.pocket:  # the overlay is standing in for this window
+            return
         self.deiconify()
         self.lift()
         self.attributes("-topmost", True)
@@ -1491,19 +1853,33 @@ class App(ctk.CTk):
         """Colour the window and header for the page that is showing."""
         self.configure(fg_color=theme.bg)
         self.tab_bar.configure(fg_color=theme.panel)
+        self.pocket_btn.configure(border_color=theme.line, hover_color=theme.panel)
         for name, btn in self.tabs.items():
-            on = name == self.current
             live = name in ("abyss", "incursion") and self.pages[name].session_id
-            btn.configure(
-                text=dict(self.TABS)[name] + ("  ●" if live else ""),
-                fg_color=theme.accent if on else "transparent",
-                hover_color=accent_hover(theme) if on else theme.line,
-                text_color=theme.bg if on else theme.soft,
-            )
+            style_tab(btn, dict(self.TABS)[name], name == self.current, live, theme)
 
     def refresh(self):
-        """Refresh the visible page; hidden pages refresh when shown."""
+        """Refresh the visible page and the pocket overlay; hidden pages refresh when shown."""
         self.show(self.current)
+        if self.pocket:
+            self.pocket.refresh()
+
+    def enter_pocket(self):
+        """Swap this window for the small always-on-top overlay."""
+        if self.pocket is None:
+            self.pocket = PocketOverlay(self)
+        self.withdraw()
+
+    def leave_pocket(self):
+        """Close the overlay and bring this window back."""
+        if self.pocket is not None:
+            self.pocket.hand_back()
+            self.pocket.destroy()
+            self.pocket = None
+        self.deiconify()
+        self.refresh()
+        self.lift()
+        self.focus_force()
 
 
 def main():

@@ -24,6 +24,7 @@ FONT_FAMILY = "Chakra Petch"
 FONT_FILES = [asset_path("fonts/ChakraPetch-Regular.ttf"), asset_path("fonts/ChakraPetch-Bold.ttf")]
 FR_PRIVATE = 0x10  # Windows: visible to this process only, but still listed by Tk
 CT_PROCESS_SCOPE = 1  # macOS: kCTFontManagerScopeProcess
+_fonts_loaded = False
 
 
 def load_fonts():
@@ -31,15 +32,19 @@ def load_fonts():
     Register the bundled font files for this process only, so nothing is installed.
 
     Call before creating the Tk window, which reads the font list when it starts.
+    Calling it again after a success does nothing (macOS refuses a second registration).
 
     Returns:
         bool: True when every file registered. Tk can still fall back to another
         family when this fails, so the UI decides with ui_family().
     """
-    try:
-        return all([_register_font(path) for path in FONT_FILES])  # try every file
-    except (OSError, AttributeError):  # missing system library or symbol
-        return False
+    global _fonts_loaded
+    if not _fonts_loaded:
+        try:
+            _fonts_loaded = all([_register_font(path) for path in FONT_FILES])  # try every file
+        except (OSError, AttributeError):  # missing system library or symbol
+            pass
+    return _fonts_loaded
 
 
 def _register_font(path):
