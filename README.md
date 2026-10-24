@@ -98,7 +98,7 @@ pyinstaller --noconsole --onefile --collect-data customtkinter --name AbyssTrack
 Run the tests:
 ```bash
 cd EveProfitManager
-python -m unittest test_core
+python -m unittest discover
 ```
 
 ## Contributing
