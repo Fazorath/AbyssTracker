@@ -1,0 +1,31 @@
+# Sets the issue's card on the GitHub Project board to Done when the issue closes.
+# Needs the PROJECT_TOKEN secret: a token with the `project` scope (GITHUB_TOKEN cannot edit Projects).
+name: Board done
+
+on:
+  issues:
+    types: [closed]
+
+permissions: {}
+
+jobs:
+  done:
+    name: Mark Done on the board
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.PROJECT_TOKEN }}
+      OWNER: Fazorath
+      NUMBER: "8"
+      REPO: ${{ github.repository }}
+      ISSUE: ${{ github.event.issue.number }}
+    steps:
+      - run: |
+          set -euo pipefail
+          project=$(gh project view "$NUMBER" --owner "$OWNER" --format json --jq .id)
+          item=$(gh project item-list "$NUMBER" --owner "$OWNER" --limit 500 --format json \
+            --jq '.items[] | select(.content.number == (env.ISSUE | tonumber) and .content.repository == env.REPO) | .id')
+          if [ -z "$item" ]; then echo "#$ISSUE is not on the board; nothing to do"; exit 0; fi
+          read -r field option < <(gh project field-list "$NUMBER" --owner "$OWNER" --format json \
+            --jq '.fields[] | select(.name == "Status") | [.id, (.options[] | select(.name == "Done") | .id)] | @tsv')
+          gh project item-edit --id "$item" --project-id "$project" --field-id "$field" --single-select-option-id "$option"
+          echo "#$ISSUE set to Done"
