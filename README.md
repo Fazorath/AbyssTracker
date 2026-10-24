@@ -11,6 +11,7 @@ This program is designed to help users track their profits and time spent during
   - [Features](#features)
   - [Screenshots](#screenshots)
   - [Getting Started](#getting-started)
+    - [Download](#download)
     - [Prerequisites](#prerequisites)
     - [Installation](#installation)
   - [Usage](#usage)
@@ -57,6 +58,17 @@ Screenshots use sample data.
 
 ## Getting Started
 
+### Download
+
+Ready-to-run builds are attached to each [release](https://github.com/Fazorath/AbyssTracker/releases); no Python needed.
+
+- **Windows:** download `AbyssTracker-windows.exe` and run it. SmartScreen may warn because the file isn't signed:
+  choose *More info → Run anyway*.
+- **macOS (Apple Silicon):** download `AbyssTracker-macos.zip`, unzip it and move `AbyssTracker.app` to Applications.
+  The app isn't notarized, so the first time right-click it and choose *Open*.
+
+To run from source instead:
+
 ### Prerequisites
 
 Python 3.10+ with Tkinter (included in the installers from [python.org](https://www.python.org/)).
@@ -88,12 +100,14 @@ cd EveProfitManager
 python main.py
 ```
 
-Build a standalone Windows .exe:
+Build the standalone app yourself (a `.exe` on Windows, an `.app` on macOS, in `dist/`):
 ```bash
 pip install pyinstaller
 cd EveProfitManager
-pyinstaller --noconsole --onefile --collect-data customtkinter --name AbyssTracker gui.py
+pyinstaller AbyssTracker.spec
 ```
+Pushing a `v*` tag (e.g. `git tag v1.0.0 && git push origin v1.0.0`) builds both on GitHub Actions and attaches
+them to a release. The app icon is drawn by `make_icon.py`; files in `assets/` are bundled into the build.
 
 Run the tests:
 ```bash

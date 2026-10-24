@@ -1,7 +1,8 @@
+import os
 import unittest
 
 from core import ABYSS, INCURSION, WEATHERS
-from theme import theme_for
+from theme import asset_path, theme_for
 
 
 class ThemeTest(unittest.TestCase):
@@ -29,6 +30,10 @@ class ThemeTest(unittest.TestCase):
         self.assertEqual(neutral.hint, "")
         self.assertEqual(theme_for(ABYSS, "Hail"), neutral)
         self.assertEqual(theme_for(None, None), neutral)
+
+    def test_asset_path_finds_the_bundled_icon(self):
+        for name in ("icon.png", "icon.ico", "icon.icns"):
+            self.assertTrue(os.path.isfile(asset_path(name)), name)
 
 
 if __name__ == "__main__":
