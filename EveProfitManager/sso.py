@@ -55,8 +55,13 @@ def _client_id():
     return client_id
 
 
+def _port():
+    return int(os.environ.get("EVE_CALLBACK_PORT", DEFAULT_PORT))
+
+
 def _redirect_uri():
-    return f"http://localhost:{os.environ.get('EVE_CALLBACK_PORT', DEFAULT_PORT)}/callback"
+    # Must match the registered callback exactly, and the server binds 127.0.0.1.
+    return f"http://127.0.0.1:{_port()}/callback"
 
 
 def _normalise_issuer(iss):
@@ -154,7 +159,7 @@ def sign_in():
     client_id = _client_id()
     verifier, challenge = _pkce_pair()
     state = secrets.token_urlsafe(16)
-    port = int(os.environ.get("EVE_CALLBACK_PORT", DEFAULT_PORT))
+    port = _port()
 
     url = AUTHORIZE_URL + "?" + urlencode(
         {

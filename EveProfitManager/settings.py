@@ -1,6 +1,9 @@
 from colorama import Fore
 import os
 
+import jwt
+import requests
+
 import sso
 
 
@@ -37,7 +40,7 @@ def settings():
                 store.save(character, tokens["refresh_token"])
                 store.set_active(character.id)
                 message = f"Signed in as {character.name}."
-            except (sso.SignInError, sso.InvalidToken) as e:
+            except (sso.SignInError, sso.InvalidToken, jwt.PyJWTError, requests.RequestException) as e:
                 message = str(e)
         elif choice == "O" and active:
             try:
