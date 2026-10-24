@@ -3,6 +3,7 @@ from abyss import abyssMain
 from incursion import incursion
 from globals import clear
 from core import Tracker
+from settings import settings
 
 
 def menu():
@@ -21,6 +22,7 @@ def menu():
 {Fore.GREEN}
 1. Abyss Money Tracker
 2. Incursion Tracker
+3. Settings (EVE sign-in)
     Choice: {Fore.RED}"""
         user_input = input(menu_text)
 
@@ -32,10 +34,14 @@ def menu():
             clear()
             incursion(tracker)
 
+        elif user_input == "3":
+            clear()
+            settings()
+
         elif user_input.upper() == "Q":
             print("\n    goodbye\n")
             break  # Exit the loop and end the program
 
         else:
             clear()
-            print(f"\n{Fore.RED}Invalid choice. Please enter 1 or 2.")
+            print(f"\n{Fore.RED}Invalid choice. Please enter 1, 2 or 3.")
