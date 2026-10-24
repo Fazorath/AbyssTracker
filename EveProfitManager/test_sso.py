@@ -1,12 +1,8 @@
-import sys
 import time
 import unittest
-from pathlib import Path
 
 import jwt
 from cryptography.hazmat.primitives.asymmetric import rsa
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from sso import InvalidToken, validate_token
 

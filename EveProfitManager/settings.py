@@ -1,10 +1,9 @@
 from colorama import Fore
-import os
-
 import jwt
 import requests
 
 import sso
+from globals import clear
 
 
 def settings():
@@ -17,7 +16,7 @@ def settings():
 
     message = ""
     while True:
-        os.system("CLS")
+        clear()
         active = store.active()
         characters = store.characters()
         print(f"{Fore.GREEN}Settings\n")
