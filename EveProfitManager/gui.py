@@ -5,6 +5,7 @@ Run with:  python gui.py
 """
 import math
 import sys
+import threading
 import time
 import tkinter as tk
 from tkinter import filedialog, messagebox
@@ -25,6 +26,8 @@ from core import (
     isk_per_hour,
     tier_label,
 )
+from wallet import get_wallet
+from account import SIGN_IN_ERRORS, Account
 from theme import NEUTRAL_THEME, asset_path, load_fonts, theme_for, ui_family
 
 # Text colours shared by every theme
@@ -700,6 +703,7 @@ class AbyssPage(SessionPage):
     def build_start_form(self, frame):
         self.start_isk = self.field(frame, 0, "Wallet now (million ISK)", 220, "e.g. 1,250 or 1.25b")
         self.start_isk.bind("<Return>", lambda _e: self.start_session())
+        self.start_wallet_note = self.wallet_fetch(frame, 2, self.start_isk)
         weather, tier = self.tracker.last_filament()
         self.tier_labels = [tier_label(t) for t in range(len(TIERS))]
         self.tier = self.choice(frame, 1, "Tier", self.tier_labels, self.tier_labels[tier or 0], 170)
@@ -714,6 +718,44 @@ class AbyssPage(SessionPage):
     def build_log_form(self, frame):
         self.after_isk = self.field(frame, 0, "Wallet after run (M)", 180, "e.g. 1,281")
         self.time_left = self.field(frame, 1, "Time left (min)", 120, "blank = timer")
+        self.log_wallet_note = self.wallet_fetch(frame, 3, self.after_isk)
+
+    def wallet_fetch(self, frame, column, entry):
+        """Add a 'Fetch from EVE' button that fills the wallet entry; returns its status label."""
+        note = self.paint(ctk.CTkLabel(frame, text="", font=font(11), justify="left", wraplength=190), text_color="soft")
+        note.grid(row=0, column=column, sticky="w")
+        self.paint(
+            ctk.CTkButton(frame, text="Fetch from EVE", width=130, height=36, fg_color="transparent",
+                          border_width=1, text_color=INK, command=lambda: self.fetch_wallet(entry, note)),
+            border_color="line", hover_color="panel",
+        ).grid(row=1, column=column, sticky="w", pady=(2, 0))
+        return note
+
+    def fetch_wallet(self, entry, note):
+        """Read the wallet from ESI into `entry`. The balance is cached by ESI for about two minutes."""
+        def show(text, color=None):
+            note.configure(text=text, text_color=color or self.theme.soft)
+
+        try:
+            client = self.app.account.client()
+        except SIGN_IN_ERRORS as e:
+            show(str(e), CRITICAL_TEXT)
+            return
+        if client is None:
+            show("Sign in under Settings first.", CRITICAL_TEXT)
+            return
+        show("Fetching...")
+
+        def done(wallet, error):
+            if error is not None:
+                show(str(error), CRITICAL_TEXT)
+                return
+            entry.delete(0, "end")
+            entry.insert(0, f"{wallet.millions:.2f}")
+            stamp = time.strftime("%H:%M:%S", time.localtime(wallet.fetched_at))
+            show(f"From EVE at {stamp}. ESI refreshes about every 2 min; edit to override.")
+
+        self.app.run_async(lambda: get_wallet(client, client.character.id), done)
 
     def build_timer(self, master):
         return TimerPanel(master, countdown_minutes=MAXTIME)
@@ -1248,12 +1290,104 @@ def _date_span(first, last):
     return f"{start} to {last:%d %b %Y}"
 
 
+class SettingsPage(ctk.CTkFrame):
+    """Sign in with EVE SSO, sign out and pick the active character."""
+
+    theme = NEUTRAL_THEME
+    toolbar = None
+    session_id = None
+
+    def __init__(self, master, app):
+        super().__init__(master, fg_color="transparent")
+        self.app = app
+        t = self.theme
+        card = ctk.CTkFrame(self, corner_radius=12, border_width=1, fg_color=t.panel, border_color=t.line)
+        card.pack(fill="x")
+        inner = ctk.CTkFrame(card, fg_color="transparent")
+        inner.pack(padx=40, pady=40, anchor="w")
+        ctk.CTkLabel(inner, text="EVE account", font=font(20, "bold"), text_color=INK).pack(anchor="w")
+        ctk.CTkLabel(
+            inner, font=font(13), text_color=t.soft, justify="left", wraplength=560,
+            text="Sign in with your EVE character so the app can read your wallet. Your browser opens "
+                 "for the CCP login; the app never sees your password.",
+        ).pack(anchor="w", pady=(4, 20))
+        self.active = ctk.CTkLabel(inner, text="", font=font(15), text_color=INK)
+        self.active.pack(anchor="w")
+        self.characters = ctk.CTkFrame(inner, fg_color="transparent")
+        self.characters.pack(anchor="w", pady=(10, 0))
+        buttons = ctk.CTkFrame(inner, fg_color="transparent")
+        buttons.pack(anchor="w", pady=(20, 0))
+        self.sign_in_btn = ctk.CTkButton(
+            buttons, text="Sign in with EVE", height=40, width=180, font=font(14, "bold"),
+            fg_color=t.accent, hover_color=accent_hover(t), text_color=t.bg, command=self.sign_in,
+        )
+        self.sign_in_btn.pack(side="left")
+        ctk.CTkButton(
+            buttons, text="Sign out", height=40, width=120, fg_color="transparent", border_width=1,
+            border_color=t.line, hover_color=t.panel, text_color=INK, command=self.sign_out,
+        ).pack(side="left", padx=(12, 0))
+        self.message = ctk.CTkLabel(inner, text="", font=font(12), wraplength=560, justify="left")
+        self.message.pack(anchor="w", pady=(10, 0))
+
+    def say(self, text, color=None):
+        self.message.configure(text=text, text_color=color or self.theme.soft)
+
+    def refresh(self):
+        for child in self.characters.winfo_children():
+            child.destroy()
+        try:
+            active = self.app.account.active()
+            characters = self.app.account.characters()
+        except SIGN_IN_ERRORS as e:
+            self.active.configure(text="Sign-in unavailable")
+            self.say(str(e), CRITICAL_TEXT)
+            return
+        self.active.configure(text=f"Active character: {active.name if active else 'none'}")
+        for c in characters:
+            on = active is not None and c.id == active.id
+            ctk.CTkButton(
+                self.characters, text=c.name + ("  ●" if on else ""), height=32, width=0,
+                fg_color=self.theme.accent if on else "transparent", border_width=1,
+                border_color=self.theme.line, hover_color=self.theme.line,
+                text_color=self.theme.bg if on else INK,
+                command=lambda cid=c.id: self.select(cid),
+            ).pack(side="left", padx=(0, 8))
+
+    def select(self, character_id):
+        self.app.account.select(character_id)
+        self.refresh()
+
+    def sign_in(self):
+        self.sign_in_btn.configure(state="disabled")
+        self.say("Waiting for the browser sign-in (5 minutes)...")
+
+        def done(character, error):
+            self.sign_in_btn.configure(state="normal")
+            if error is not None:
+                self.say(str(error), CRITICAL_TEXT)
+            else:
+                self.say(f"Signed in as {character.name}.", GOOD_TEXT)
+            self.refresh()
+
+        self.app.run_async(self.app.account.sign_in, done)
+
+    def sign_out(self):
+        try:
+            gone = self.app.account.sign_out()
+        except SIGN_IN_ERRORS as e:
+            self.say(str(e), CRITICAL_TEXT)
+            return
+        self.say(f"Signed out {gone.name}." if gone else "Nobody is signed in.")
+        self.refresh()
+
+
 class App(ctk.CTk):
-    TABS = [("abyss", "Session"), ("incursion", "Incursion"), ("history", "History")]
+    TABS = [("abyss", "Session"), ("incursion", "Incursion"), ("history", "History"), ("settings", "Settings")]
 
     def __init__(self, tracker=None):
         super().__init__(fg_color=NEUTRAL_THEME.bg)
         self.tracker = tracker or Tracker()
+        self.account = Account()
         self.title("Abyss Tracker")
         self.geometry("1180x800")
         self.minsize(1000, 700)
@@ -1281,6 +1415,7 @@ class App(ctk.CTk):
             "abyss": AbyssPage(content, self),
             "incursion": IncursionPage(content, self),
             "history": HistoryPage(content, self),
+            "settings": SettingsPage(content, self),
         }
 
         self.current = None
@@ -1289,6 +1424,26 @@ class App(ctk.CTk):
         active = next((k for k in ("abyss", "incursion") if self.pages[k].session_id), "abyss")
         self.show(active)
         self.after(150, self.bring_to_front)
+
+    def run_async(self, work, done):
+        """Run `work()` off the UI thread, then call `done(result, error)` on it."""
+        outcome = []
+
+        def target():
+            try:
+                outcome.append((work(), None))
+            except Exception as e:
+                outcome.append((None, e))
+
+        threading.Thread(target=target, daemon=True).start()
+
+        def poll():
+            if outcome:
+                done(*outcome[0])
+            else:
+                self.after(100, poll)
+
+        poll()
 
     def use_ui_font(self):
         """

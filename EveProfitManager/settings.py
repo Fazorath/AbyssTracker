@@ -1,24 +1,21 @@
 from colorama import Fore
-import jwt
-import requests
-
 import sso
+from account import SIGN_IN_ERRORS, Account
 from globals import clear
 
 
 def settings():
     """Sign in, sign out and pick the active EVE character."""
-    try:
-        store = sso.TokenStore()
-    except ImportError:
-        print(f"\n{Fore.RED}Install the 'keyring' package to use sign-in.\n")
-        return
-
+    account = Account()
     message = ""
     while True:
         clear()
-        active = store.active()
-        characters = store.characters()
+        try:
+            active = account.active()
+            characters = account.characters()
+        except sso.SignInError as e:
+            print(f"\n{Fore.RED}{e}\n")
+            return
         print(f"{Fore.GREEN}Settings\n")
         print(f"Active character: {Fore.RED}{active.name if active else 'none'}{Fore.GREEN}")
         for i, c in enumerate(characters, 1):
@@ -35,20 +32,12 @@ def settings():
             return
         elif choice == "S":
             try:
-                character, tokens = sso.sign_in()
-                store.save(character, tokens["refresh_token"])
-                store.set_active(character.id)
-                message = f"Signed in as {character.name}."
-            except (sso.SignInError, sso.InvalidToken, jwt.PyJWTError, requests.RequestException) as e:
+                message = f"Signed in as {account.sign_in().name}."
+            except SIGN_IN_ERRORS as e:
                 message = str(e)
         elif choice == "O" and active:
-            try:
-                sso.revoke(store.refresh_token(active.id))
-            except Exception:
-                pass  # still remove the local copy
-            store.remove(active.id)
-            message = f"Signed out {active.name}."
+            message = f"Signed out {account.sign_out().name}."
         elif choice.isdigit() and 1 <= int(choice) <= len(characters):
-            store.set_active(characters[int(choice) - 1].id)
+            account.select(characters[int(choice) - 1].id)
         else:
             message = "Invalid choice."

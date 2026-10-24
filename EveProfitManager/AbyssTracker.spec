@@ -16,6 +16,8 @@ ICON = "assets/icon.icns" if MAC else "assets/icon.ico"
 a = Analysis(
     ["gui.py"],
     datas=collect_data_files("customtkinter") + [("assets", "assets")],
+    # keyring finds its OS backend through entry points, which PyInstaller cannot see
+    hiddenimports=["keyring.backends.Windows", "keyring.backends.macOS"],
     excludes=["colorama"],  # only used by the terminal tracker
 )
 pyz = PYZ(a.pure)

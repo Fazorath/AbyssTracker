@@ -23,6 +23,7 @@ class EsiClient:
         self._access_token = None
         self._access_expires = 0.0
         self._cache = {}  # path -> (etag, expires_at, body)
+        self._fetched = {}  # path -> when ESI last answered for it
         self._blocked_until = 0.0
         self._session = requests.Session()
         self._session.headers.update(
@@ -43,6 +44,10 @@ class EsiClient:
         self._access_token = tokens["access_token"]
         self._access_expires = time.time() + tokens.get("expires_in", 1200)
         return self._access_token
+
+    def fetched_at(self, path):
+        """When ESI last answered for this path (0 if never)."""
+        return self._fetched.get(path, 0.0)
 
     def get(self, path, auth=True):
         """GET an ESI path (no version prefix). Returns decoded JSON."""
@@ -75,6 +80,7 @@ class EsiClient:
         else:
             raise EsiError(f"ESI returned {response.status_code}: {response.text}")
 
+        self._fetched[path] = time.time()
         expires = response.headers.get("Expires")
         if expires:
             try:
