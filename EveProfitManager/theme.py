@@ -1,6 +1,10 @@
 """
 Filament theme: colour tokens per abyssal weather, used by the desktop UI.
 """
+import ctypes
+import ctypes.util
+import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -13,6 +17,74 @@ ASSETS = Path(__file__).resolve().parent / "assets"
 def asset_path(name):
     """Absolute path of a file in the assets folder."""
     return str(ASSETS / name)
+
+
+# UI typeface, bundled under the SIL Open Font License (assets/fonts/OFL.txt)
+FONT_FAMILY = "Chakra Petch"
+FONT_FILES = [asset_path("fonts/ChakraPetch-Regular.ttf"), asset_path("fonts/ChakraPetch-Bold.ttf")]
+
+
+def load_fonts():
+    """
+    Register the bundled font files for this process only, so nothing is installed.
+
+    Call before creating the Tk window, which reads the font list when it starts.
+
+    Returns:
+        bool: True when every file registered. Tk can still fall back to another
+        family when this fails, so the UI decides with ui_family().
+    """
+    try:
+        return all(_register_font(path) for path in FONT_FILES)
+    except (OSError, AttributeError):  # missing system library or symbol
+        return False
+
+
+def _register_font(path):
+    if sys.platform == "win32":
+        FR_PRIVATE = 0x10  # visible to this process only, but still listed by Tk
+        return ctypes.windll.gdi32.AddFontResourceExW(path, FR_PRIVATE, 0) > 0
+
+    if sys.platform == "darwin":
+        cf = ctypes.CDLL("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation")
+        ct = ctypes.CDLL("/System/Library/Frameworks/CoreText.framework/CoreText")
+        cf.CFURLCreateFromFileSystemRepresentation.restype = ctypes.c_void_p
+        cf.CFURLCreateFromFileSystemRepresentation.argtypes = [
+            ctypes.c_void_p, ctypes.c_char_p, ctypes.c_long, ctypes.c_bool]
+        cf.CFRelease.argtypes = [ctypes.c_void_p]
+        ct.CTFontManagerRegisterFontsForURL.restype = ctypes.c_bool
+        ct.CTFontManagerRegisterFontsForURL.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.c_void_p]
+        raw = os.fsencode(path)
+        url = cf.CFURLCreateFromFileSystemRepresentation(None, raw, len(raw), False)
+        if not url:
+            return False
+        try:
+            PROCESS_SCOPE = 1  # kCTFontManagerScopeProcess
+            return ct.CTFontManagerRegisterFontsForURL(url, PROCESS_SCOPE, None)
+        finally:
+            cf.CFRelease(url)
+
+    # Linux and other X11 systems: Tk draws through fontconfig (Xft)
+    name = ctypes.util.find_library("fontconfig")
+    if not name:
+        return False
+    fontconfig = ctypes.CDLL(name)
+    fontconfig.FcConfigAppFontAddFile.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+    return bool(fontconfig.FcConfigAppFontAddFile(None, os.fsencode(path)))
+
+
+def ui_family(available, fallback):
+    """
+    The font family the UI draws with.
+
+    Args:
+        available (Iterable[str]): Families Tk can use (tkinter.font.families()).
+        fallback (str): Family to use when the bundled font did not load.
+
+    Returns:
+        str: FONT_FAMILY when Tk has it, otherwise fallback.
+    """
+    return FONT_FAMILY if FONT_FAMILY in available else fallback
 
 
 @dataclass(frozen=True)

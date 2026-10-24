@@ -120,6 +120,7 @@ Contributions are welcome! If you find any bugs or have suggestions for improvem
 
 License
 This project is licensed under the MIT License - see the LICENSE file for details.
+The bundled UI font, Chakra Petch, is under the SIL Open Font License; see `EveProfitManager/assets/fonts/OFL.txt`.
 # Todo:
 1. ~~Function to average out profits hourly in both the abyss and incursion functions~~
 2. ~~error input for the Incursion Module~~
