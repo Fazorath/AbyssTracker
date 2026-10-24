@@ -6,43 +6,40 @@ time used and a faint track for the time left.
 
 Run with:  pip install pillow && python make_icon.py
 """
-from pathlib import Path
-
 from PIL import Image, ImageDraw
 
-HERE = Path(__file__).parent / "assets"
+from theme import ASSETS, NEUTRAL_THEME
+
 SIZE = 1024
 SCALE = 4  # draw large, then downsample for smooth edges
 
-BG = "#100e16"     # NEUTRAL_THEME.bg
-TRACK = "#3b3550"  # NEUTRAL_THEME.line
-ACCENT = "#d95926"  # Abyss colour
+ACCENT = "#d95926"  # gui.KIND_COLOR[ABYSS]; gui imports customtkinter, so not imported here
 
 
 def draw():
-    s = SIZE * SCALE
-    img = Image.new("RGBA", (s, s), (0, 0, 0, 0))
-    d = ImageDraw.Draw(img)
+    side = SIZE * SCALE
+    img = Image.new("RGBA", (side, side), (0, 0, 0, 0))
+    pen = ImageDraw.Draw(img)
     # macOS-style tile: content inset ~10% with a rounded square
-    inset = s * 0.1
-    d.rounded_rectangle((inset, inset, s - inset, s - inset), radius=s * 0.18, fill=BG)
+    inset = side * 0.1
+    pen.rounded_rectangle((inset, inset, side - inset, side - inset), radius=side * 0.18, fill=NEUTRAL_THEME.bg)
 
-    box = (s * 0.27, s * 0.27, s * 0.73, s * 0.73)
-    width = int(s * 0.07)
-    d.arc(box, 0, 360, fill=TRACK, width=width)
+    box = (side * 0.27, side * 0.27, side * 0.73, side * 0.73)
+    width = int(side * 0.07)
+    pen.arc(box, 0, 360, fill=NEUTRAL_THEME.line, width=width)
     # 14 of 20 minutes used, starting at 12 o'clock
-    d.arc(box, -90, -90 + 360 * 14 / 20, fill=ACCENT, width=width)
+    pen.arc(box, -90, -90 + 360 * 14 / 20, fill=ACCENT, width=width)
     # centre dot
-    r = s * 0.045
-    d.ellipse((s / 2 - r, s / 2 - r, s / 2 + r, s / 2 + r), fill=ACCENT)
+    dot = side * 0.045
+    pen.ellipse((side / 2 - dot, side / 2 - dot, side / 2 + dot, side / 2 + dot), fill=ACCENT)
     return img.resize((SIZE, SIZE), Image.LANCZOS)
 
 
 def main():
     img = draw()
-    img.save(HERE / "icon.png")
-    img.save(HERE / "icon.ico", sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
-    img.save(HERE / "icon.icns")
+    img.save(ASSETS / "icon.png")
+    img.save(ASSETS / "icon.ico", sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
+    img.save(ASSETS / "icon.icns")
 
 
 if __name__ == "__main__":

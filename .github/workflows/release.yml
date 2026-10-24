@@ -1,11 +1,18 @@
 # Build the desktop app for Windows and macOS when a version tag is pushed,
 # and attach both to a GitHub release for that tag.
 #   git tag v1.0.0 && git push origin v1.0.0
+# Pull requests that touch the build only build, so packaging breaks show up before a tag.
 name: Release
 
 on:
   push:
     tags: ["v*"]
+  pull_request:
+    paths:
+      - ".github/workflows/release.yml"
+      - "EveProfitManager/AbyssTracker.spec"
+      - "EveProfitManager/assets/**"
+      - "requirements.txt"
   workflow_dispatch:  # manual run builds the artifacts without releasing
 
 permissions:
@@ -59,5 +66,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: >
-          gh release create "$GITHUB_REF_NAME" AbyssTracker-windows.exe AbyssTracker-macos.zip
+          gh release create "$GITHUB_REF_NAME" AbyssTracker-*
           --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes

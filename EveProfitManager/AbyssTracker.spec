@@ -11,6 +11,7 @@ from PyInstaller.utils.hooks import collect_data_files
 
 NAME = "AbyssTracker"
 MAC = sys.platform == "darwin"
+ICON = "assets/icon.icns" if MAC else "assets/icon.ico"
 
 a = Analysis(
     ["gui.py"],
@@ -21,14 +22,14 @@ pyz = PYZ(a.pure)
 
 if MAC:
     # One-folder build wrapped in an .app; one-file .app bundles are deprecated
-    exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name=NAME, console=False, icon="assets/icon.icns")
+    exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name=NAME, console=False, icon=ICON)
     coll = COLLECT(exe, a.binaries, a.datas, name=NAME)
     app = BUNDLE(
         coll,
         name=f"{NAME}.app",
-        icon="assets/icon.icns",
+        icon=ICON,
         bundle_identifier="com.fazorath.abysstracker",
         info_plist={"CFBundleDisplayName": "Abyss Tracker", "NSHighResolutionCapable": True},
     )
 else:
-    exe = EXE(pyz, a.scripts, a.binaries, a.datas, [], name=NAME, console=False, icon="assets/icon.ico")
+    exe = EXE(pyz, a.scripts, a.binaries, a.datas, [], name=NAME, console=False, icon=ICON)

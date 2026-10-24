@@ -1260,6 +1260,7 @@ class App(ctk.CTk):
         if sys.platform == "win32":
             self.iconbitmap(asset_path("icon.ico"))
         else:
+            # Keep a reference: Tk drops the image once Python garbage-collects it
             self.icon = tk.PhotoImage(file=asset_path("icon.png"))
             self.iconphoto(True, self.icon)
 
