@@ -32,7 +32,8 @@ This program is designed to help users track their profits and time spent during
     from the built-in stopwatch.
   - Each run shows as a tile with its profit, duration and **ISK/hour**, where you can fix (✎) or delete mistakes,
     with the session's profit, ISK/hour, time and wallet below.
-  - **History page:** lifetime totals, a profit-per-session chart with hover details, and every past session,
+  - **History page:** net profit, ISK/hour and winning sessions, a profit-per-session chart with hover details,
+    ISK/hour for each weather (and the best one), and every past session with its weather and tier,
     filterable by Abyss/Incursion. Old `Sessions.txt` files can be imported.
   - Every run is saved immediately, so closing the app mid-session picks up where you left off.
   - Amounts are in millions of ISK; you can type `1,250`, `1.25b` or `800k`. Times accept `14.5` or `14:30`.

@@ -17,6 +17,7 @@ from core import (
     TIERS,
     WEATHERS,
     Tracker,
+    best_weather,
     format_isk,
     format_minutes,
     isk_per_hour,
@@ -24,17 +25,10 @@ from core import (
 )
 from theme import NEUTRAL_THEME, theme_for
 
-# Dark theme tokens for the History page; session pages use the Filament theme
-SURFACE = "#1a1a19"
-RAISED = "#242422"
-BORDER = "#2c2c2a"
-AXIS = "#383835"
+# Text colours shared by every theme
 INK = "#f0efec"
 INK_2 = "#c3c2b7"
-MUTED = "#898781"
-GOOD = "#0ca30c"
 WARNING = "#fab219"
-CRITICAL = "#d03b3b"
 GOOD_TEXT = "#3fcf5e"
 CRITICAL_TEXT = "#ec6b6b"
 
@@ -104,24 +98,6 @@ def mix(color, other, amount):
 def accent_hover(theme):
     """Hover colour for accent-filled buttons."""
     return mix(theme.accent, theme.bg, 0.2)
-
-
-class StatCard(ctk.CTkFrame):
-    """A small tile with a label and a big number."""
-
-    def __init__(self, master, label):
-        super().__init__(master, fg_color=SURFACE, corner_radius=10, border_width=1, border_color=BORDER)
-        ctk.CTkLabel(self, text=label.upper(), font=font(11, "bold"), text_color=MUTED).pack(
-            anchor="w", padx=16, pady=(12, 0)
-        )
-        self.value = ctk.CTkLabel(self, text="—", font=font(24, "bold"), text_color=INK)
-        self.value.pack(anchor="w", padx=16)
-        self.sub = ctk.CTkLabel(self, text="", font=font(11), text_color=MUTED, height=16)
-        self.sub.pack(anchor="w", padx=16, pady=(0, 10))
-
-    def set(self, value, color=INK, sub=""):
-        self.value.configure(text=value, text_color=color)
-        self.sub.configure(text=sub)
 
 
 # paint() options for accent-filled buttons
@@ -320,64 +296,6 @@ class ChipGroup(ctk.CTkFrame):
                 fg_color=theme.accent if on else "transparent", border_color=theme.accent if on else theme.line,
                 hover_color=accent_hover(theme) if on else theme.line, text_color=theme.bg if on else INK,
             )
-
-
-class RunLog(ctk.CTkFrame):
-    """Table of the runs/sites in the current session, newest first."""
-
-    def __init__(self, master, columns, on_delete, on_edit=None):
-        super().__init__(master, fg_color=SURFACE, corner_radius=10, border_width=1, border_color=BORDER)
-        self.columns = columns  # list of (heading, width, anchor)
-        self.on_edit = on_edit
-        self.on_delete = on_delete
-        header = ctk.CTkFrame(self, fg_color="transparent", height=32)
-        header.pack(fill="x", padx=12, pady=(10, 0))
-        self._layout(header)
-        for i, (heading, _, anchor) in enumerate(columns):
-            ctk.CTkLabel(header, text=heading.upper(), font=font(11, "bold"), text_color=MUTED, anchor=anchor).grid(
-                row=0, column=i, sticky="ew", padx=6
-            )
-        ctk.CTkFrame(self, fg_color=BORDER, height=1).pack(fill="x", padx=12, pady=(4, 0))
-        self.body = ctk.CTkScrollableFrame(self, fg_color="transparent")
-        self.body.pack(fill="both", expand=True, padx=4, pady=(0, 8))
-        self.empty = ctk.CTkLabel(self.body, text="", text_color=MUTED, font=font(13))
-
-    def _layout(self, frame):
-        for i, (_, width, _) in enumerate(self.columns):
-            frame.grid_columnconfigure(i, minsize=width, weight=1 if width == 0 else 0)
-        for i in range(len(self.columns), len(self.columns) + (2 if self.on_edit else 1)):
-            frame.grid_columnconfigure(i, minsize=36)
-
-    def show(self, rows, empty_text):
-        """
-        Args:
-            rows (list[tuple[int, list[tuple[str, str]]]]): (run id, [(text, color), ...]) per row.
-            empty_text (str): Shown when there are no rows.
-        """
-        for child in self.body.winfo_children():
-            if child is not self.empty:
-                child.destroy()
-        if not rows:
-            self.empty.configure(text=empty_text)
-            self.empty.pack(pady=30)
-            return
-        self.empty.pack_forget()
-        for run_id, cells in rows:
-            row = ctk.CTkFrame(self.body, fg_color="transparent", height=34)
-            row.pack(fill="x", padx=8)
-            self._layout(row)
-            for i, (text, color) in enumerate(cells):
-                ctk.CTkLabel(row, text=text, text_color=color, font=font(13), anchor=self.columns[i][2]).grid(
-                    row=0, column=i, sticky="ew", padx=6, pady=3
-                )
-            actions = [("×", self.on_delete)]
-            if self.on_edit:
-                actions.insert(0, ("✎", self.on_edit))
-            for i, (text, action) in enumerate(actions):
-                ctk.CTkButton(
-                    row, text=text, width=28, height=24, fg_color="transparent", hover_color=BORDER,
-                    text_color=MUTED, command=lambda r=run_id, a=action: a(r),
-                ).grid(row=0, column=len(cells) + i, padx=(4, 0))
 
 
 class EditRunDialog(ctk.CTkToplevel):
@@ -891,28 +809,31 @@ class IncursionPage(SessionPage):
 class ProfitChart(tk.Canvas):
     """Bar chart of profit per session, oldest to newest, with a hover tooltip."""
 
-    PAD_L, PAD_R, PAD_T, PAD_B = 64, 16, 16, 28
+    PAD_L, PAD_R, PAD_T, PAD_B = 64, 8, 12, 26
 
-    def __init__(self, master):
-        super().__init__(master, bg=SURFACE, highlightthickness=0, height=240)
+    def __init__(self, master, theme):
+        super().__init__(master, bg=theme.panel, highlightthickness=0, height=220)
+        self.theme = theme
         self.sessions = []
-        self.bars = []  # (x0, x1, session)
+        self.bars = []  # (x0, x1, session, cx)
         self.bind("<Configure>", lambda _e: self.draw())
         self.bind("<Motion>", self._hover)
         self.bind("<Leave>", lambda _e: self.delete("tip"))
 
     def show(self, sessions):
-        self.sessions = list(reversed(sessions[:40]))
+        """Draw the given sessions, newest first as from Tracker.sessions()."""
+        self.sessions = list(reversed(sessions))
         self.draw()
 
     def draw(self):
         self.delete("all")
         self.bars = []
+        t = self.theme
         w, h = self.winfo_width(), self.winfo_height()
         if w < 50:
             return
         if not self.sessions:
-            self.create_text(w / 2, h / 2, text="No sessions yet", fill=MUTED, font=("TkDefaultFont", 11))
+            self.create_text(w / 2, h / 2, text="No sessions yet", fill=t.soft, font=("TkDefaultFont", 11))
             return
         top = max(0.0, max(s.profit for s in self.sessions))
         bottom = min(0.0, min(s.profit for s in self.sessions))
@@ -926,22 +847,22 @@ class ProfitChart(tk.Canvas):
 
         v = bottom
         while v <= top + step / 2:
-            self.create_line(self.PAD_L, y(v), w - self.PAD_R, y(v), fill=BORDER if v else AXIS)
-            self.create_text(self.PAD_L - 10, y(v), text=format_isk(v), anchor="e", fill=MUTED,
+            self.create_line(self.PAD_L, y(v), w - self.PAD_R, y(v),
+                             fill=t.line if v == 0 else mix(t.line, t.panel, 0.5))
+            self.create_text(self.PAD_L - 10, y(v), text=format_isk(v), anchor="e", fill=t.soft,
                              font=("TkDefaultFont", 9))
             v += step
 
         slot = (w - self.PAD_L - self.PAD_R) / len(self.sessions)
-        bar_w = max(3, min(28, slot - 2))
+        bar_w = max(3, min(28, slot * 0.68))
         label_every = max(1, int(70 // slot) + 1)
         last = len(self.sessions) - 1
         for i, s in enumerate(self.sessions):
             cx = self.PAD_L + slot * (i + 0.5)
-            x0, x1 = cx - bar_w / 2, cx + bar_w / 2
-            self._bar(x0, x1, y(0), y(s.profit), KIND_COLOR[s.kind])
-            self.bars.append((self.PAD_L + slot * i, self.PAD_L + slot * (i + 1), s, cx, y(s.profit)))
+            self._bar(cx - bar_w / 2, cx + bar_w / 2, y(0), y(s.profit), KIND_COLOR[s.kind])
+            self.bars.append((self.PAD_L + slot * i, self.PAD_L + slot * (i + 1), s, cx))
             if (i % label_every == 0 and last - i >= label_every) or i == last:
-                self.create_text(cx, h - self.PAD_B + 14, text=f"{s.started_at:%d %b}", fill=MUTED,
+                self.create_text(cx, h - self.PAD_B + 14, text=f"{s.started_at:%d %b}", fill=t.soft,
                                  font=("TkDefaultFont", 9))
 
     def _bar(self, x0, x1, base, end, color):
@@ -964,25 +885,27 @@ class ProfitChart(tk.Canvas):
 
     def _hover(self, event):
         self.delete("tip")
-        for x0, x1, s, cx, top in self.bars:
+        for x0, x1, s, cx in self.bars:
             if x0 <= event.x < x1:
                 break
         else:
             return
+        t = self.theme
+        tier = f" {tier_label(s.tier)}" if s.tier is not None else ""
         lines = [
-            f"{KIND_NAME[s.kind]} · {s.started_at:%a %d %b %Y, %H:%M}",
+            f"{session_label(s)}{tier} · {s.started_at:%a %d %b %Y, %H:%M}",
             f"Profit  {signed_isk(s.profit)}",
             f"{s.runs} {'runs' if s.kind == ABYSS else 'sites'} · {format_minutes(s.minutes)}",
             f"ISK/hr  {format_isk(s.isk_per_hour)}",
         ]
-        self.create_line(cx, self.PAD_T, cx, self.winfo_height() - self.PAD_B, fill=AXIS, dash=(2, 3), tags="tip")
+        self.create_line(cx, self.PAD_T, cx, self.winfo_height() - self.PAD_B, fill=t.line, dash=(2, 3), tags="tip")
         text = self.create_text(0, 0, text="\n".join(lines), anchor="nw", fill=INK,
                                 font=("TkDefaultFont", 10), tags="tip")
         bx0, by0, bx1, by1 = self.bbox(text)
-        tw, th = bx1 - bx0 + 20, by1 - by0 + 16
+        tw, th = bx1 - bx0 + 34, by1 - by0 + 16
         tx = cx + 12 if cx + 12 + tw < self.winfo_width() else cx - 12 - tw
         ty = min(max(self.PAD_T, event.y - th / 2), self.winfo_height() - th - 4)
-        box = self.create_rectangle(tx, ty, tx + tw, ty + th, fill=RAISED, outline=AXIS, tags="tip")
+        box = self.create_rectangle(tx, ty, tx + tw, ty + th, fill=t.bg, outline=t.line, tags="tip")
         self.create_rectangle(tx + 10, ty + 11, tx + 18, ty + 19, fill=KIND_COLOR[s.kind], width=0, tags="tip")
         self.coords(text, tx + 24, ty + 8)
         self.tag_raise(text, box)
@@ -997,84 +920,262 @@ def _nice_step(span, ticks=4):
     return 10 * magnitude
 
 
+def session_label(session):
+    """What a session was: its weather, 'Incursion', or 'Abyss' when no weather was recorded."""
+    return session.weather or KIND_NAME[session.kind]
+
+
+def session_color(session):
+    """The accent of the session's weather or of incursions; abyss orange when no weather was recorded."""
+    if session.kind == ABYSS and not session.weather:
+        return KIND_COLOR[ABYSS]
+    return theme_for(session.kind, session.weather).accent
+
+
+class WeatherRates(tk.Canvas):
+    """ISK/hour for each abyssal weather and for incursions as bars, with a line about the best weather."""
+
+    ROW = 30
+    BEST = 34  # height of the best-weather line under the bars
+
+    def __init__(self, master, theme):
+        super().__init__(master, bg=theme.panel, highlightthickness=0, height=self.BEST)
+        self.theme = theme
+        self.rows = []
+        self.best = ""
+        self.bind("<Configure>", lambda _e: self.draw())
+
+    def show(self, rows, best):
+        """
+        Args:
+            rows (list[tuple[str, Totals | None, str, bool]]): (name, totals, accent, dimmed) per row.
+            best (str): The line under the bars.
+        """
+        self.rows = rows
+        self.best = best
+        self.configure(height=self.ROW * len(rows) + self.BEST)
+        self.draw()
+
+    def draw(self):
+        self.delete("all")
+        t = self.theme
+        w = self.winfo_width()
+        if w < 50:
+            return
+        widest = max((abs(totals.isk_per_hour) for _, totals, _, _ in self.rows if totals), default=0) or 1
+        x0, x1 = 100, w - 76
+        for i, (name, totals, accent, dimmed) in enumerate(self.rows):
+            fade = (lambda c: mix(c, t.panel, 0.55)) if dimmed else (lambda c: c)
+            y = self.ROW * i + self.ROW / 2
+            self.create_text(0, y, text=name, anchor="w", fill=fade(INK), font=("TkDefaultFont", 12))
+            self._pill(x0, x1, y, fade(mix(INK, t.panel, 0.92)))
+            if totals:
+                rate = totals.isk_per_hour
+                self._pill(x0, x0 + max(10, (x1 - x0) * abs(rate) / widest), y,
+                           fade(accent if rate >= 0 else CRITICAL_TEXT))
+            self.create_text(w, y, text=format_isk(totals.isk_per_hour) if totals else "—", anchor="e",
+                             fill=fade(INK), font=("TkDefaultFont", 12, "bold"))
+        self.create_text(0, self.ROW * len(self.rows) + self.BEST / 2, text=self.best, anchor="w", fill=t.soft,
+                         font=("TkDefaultFont", 11))
+
+    def _pill(self, x0, x1, y, color):
+        r = 5
+        self.create_rectangle(x0 + r, y - r, x1 - r, y + r, fill=color, width=0)
+        self.create_oval(x0, y - r, x0 + 2 * r, y + r, fill=color, width=0)
+        self.create_oval(x1 - 2 * r, y - r, x1, y + r, fill=color, width=0)
+
+
+class SessionTable(ctk.CTkFrame):
+    """Table of past sessions, newest first, with a delete button on each row."""
+
+    def __init__(self, master, theme, columns, on_delete):
+        super().__init__(master, fg_color=theme.panel, corner_radius=12)
+        self.theme = theme
+        self.columns = columns  # list of (heading, width, anchor)
+        self.on_delete = on_delete
+        header = ctk.CTkFrame(self, fg_color="transparent", height=32)
+        header.pack(fill="x", padx=12, pady=(8, 0))
+        self._layout(header)
+        for i, (heading, _, anchor) in enumerate(columns):
+            ctk.CTkLabel(header, text=heading, font=font(12), text_color=theme.soft, anchor=anchor).grid(
+                row=0, column=i, sticky="ew", padx=6
+            )
+        self.body = ctk.CTkScrollableFrame(self, fg_color="transparent", scrollbar_button_color=theme.line,
+                                           scrollbar_button_hover_color=theme.soft)
+        self.body.pack(fill="both", expand=True, padx=4, pady=(0, 8))
+        self.empty = ctk.CTkLabel(self.body, text="", text_color=theme.soft, font=font(13))
+
+    def _layout(self, frame):
+        for i, (_, width, _) in enumerate(self.columns):
+            frame.grid_columnconfigure(i, minsize=width, weight=1 if width == 0 else 0)
+        frame.grid_columnconfigure(len(self.columns), minsize=36)
+
+    def show(self, rows, empty_text):
+        """
+        Args:
+            rows (list[tuple[int, list[tuple]]]): (session id, cells) per row. A cell is
+                (text, color), or (text, color, dot color) for a coloured dot before the text.
+            empty_text (str): Shown when there are no rows.
+        """
+        for child in self.body.winfo_children():
+            if child is not self.empty:
+                child.destroy()
+        if not rows:
+            self.empty.configure(text=empty_text)
+            self.empty.pack(pady=30)
+            return
+        self.empty.pack_forget()
+        for session_id, cells in rows:
+            ctk.CTkFrame(self.body, fg_color=self.theme.line, height=1).pack(fill="x", padx=8)
+            row = ctk.CTkFrame(self.body, fg_color="transparent", height=36)
+            row.pack(fill="x", padx=8)
+            self._layout(row)
+            for i, (text, color, *dot) in enumerate(cells):
+                cell = ctk.CTkFrame(row, fg_color="transparent")
+                cell.grid(row=0, column=i, sticky="ew", padx=6, pady=3)
+                if dot:
+                    ctk.CTkFrame(cell, width=8, height=8, corner_radius=4, fg_color=dot[0]).pack(
+                        side="left", padx=(0, 8)
+                    )
+                ctk.CTkLabel(cell, text=text, text_color=color, font=font(14), anchor=self.columns[i][2]).pack(
+                    side="left", fill="x", expand=True
+                )
+            ctk.CTkButton(
+                row, text="×", width=28, height=24, fg_color="transparent", hover_color=self.theme.line,
+                text_color=self.theme.soft, command=lambda s=session_id: self.on_delete(s),
+            ).grid(row=0, column=len(cells), padx=(4, 0))
+
+
 class HistoryPage(ctk.CTkFrame):
-    """Lifetime stats, a profit chart and the list of past sessions."""
+    """
+    Lifetime totals, profit per session, ISK/hour by weather and the list of past
+    sessions, in the neutral Filament theme whatever the weather.
+    """
 
     FILTERS = {"All": None, "Abyss": ABYSS, "Incursion": INCURSION}
+    CHART_SESSIONS = 40  # most recent sessions shown in the chart
     theme = NEUTRAL_THEME
-    toolbar = None
 
     def __init__(self, master, app):
         super().__init__(master, fg_color="transparent")
         self.app = app
         self.tracker = app.tracker
+        t = self.theme
 
-        header = ctk.CTkFrame(self, fg_color="transparent")
-        header.pack(fill="x", pady=(0, 16))
-        ctk.CTkLabel(header, text="History", font=font(26, "bold"), text_color=INK).pack(side="left")
+        # Shown on the right of the app header while this page is open
+        self.toolbar = ctk.CTkFrame(app.header, fg_color="transparent")
+        self.span = ctk.CTkLabel(self.toolbar, text="", font=font(13), text_color=t.soft)
+        self.span.pack(side="left", padx=(0, 14))
         ctk.CTkButton(
-            header, text="Import Sessions.txt", width=160, fg_color="transparent", border_width=1,
-            border_color=AXIS, hover_color=BORDER, text_color=INK, command=self.import_txt,
-        ).pack(side="right")
-        self.filter = ctk.CTkSegmentedButton(header, values=list(self.FILTERS), command=lambda _v: self.refresh())
-        self.filter.set("All")
-        self.filter.pack(side="right", padx=12)
+            self.toolbar, text="Import Sessions.txt", width=160, height=34, fg_color="transparent", border_width=1,
+            border_color=t.line, hover_color=t.panel, text_color=INK, command=self.import_txt,
+        ).pack(side="left")
 
-        cards = ctk.CTkFrame(self, fg_color="transparent")
-        cards.pack(fill="x")
-        self.cards = {}
-        for i, (key, label) in enumerate([("profit", "Total profit"), ("rate", "ISK / hour"),
-                                          ("runs", "Runs & sites"), ("time", "Time"), ("sessions", "Sessions")]):
-            cards.grid_columnconfigure(i, weight=1, uniform="cards")
-            self.cards[key] = StatCard(cards, label)
-            self.cards[key].grid(row=0, column=i, sticky="nsew", padx=(0 if i == 0 else 6, 0))
+        self.filter = ChipGroup(self, list(self.FILTERS), "All", lambda _v: self.refresh())
+        self.filter.set_theme(t)
+        self.filter.pack(anchor="w")
 
-        chart_card = ctk.CTkFrame(self, fg_color=SURFACE, corner_radius=10, border_width=1, border_color=BORDER)
-        chart_card.pack(fill="x", pady=12)
+        totals = ctk.CTkFrame(self, fg_color="transparent")
+        totals.pack(fill="x", pady=(14, 16))
+        net = ctk.CTkFrame(totals, fg_color="transparent")
+        net.pack(side="left", anchor="s", padx=(0, 44))
+        self.net_label = ctk.CTkLabel(net, text="", font=font(13), text_color=t.soft, height=18)
+        self.net_label.pack(anchor="w")
+        self.net = ctk.CTkLabel(net, text="", font=font(64, "bold"), text_color=t.accent, height=70)
+        self.net.pack(anchor="w")
+        self.cells = {}
+        for key in ("rate", "runs", "time", "wins"):
+            cell = ctk.CTkFrame(totals, fg_color="transparent")
+            cell.pack(side="left", anchor="s", padx=(0, 44), pady=(0, 6))
+            label = ctk.CTkLabel(cell, text="", font=font(12), text_color=t.soft, height=16)
+            label.pack(anchor="w")
+            value = ctk.CTkLabel(cell, text="", font=font(26, "bold"), text_color=INK, height=32)
+            value.pack(anchor="w")
+            self.cells[key] = (label, value)
+
+        middle = ctk.CTkFrame(self, fg_color="transparent")
+        middle.pack(fill="x")
+        middle.grid_columnconfigure(0, weight=1)
+        middle.grid_columnconfigure(1, minsize=340)
+
+        chart_card = ctk.CTkFrame(middle, fg_color=t.panel, corner_radius=12)
+        chart_card.grid(row=0, column=0, sticky="nsew", padx=(0, 14))
         top = ctk.CTkFrame(chart_card, fg_color="transparent")
-        top.pack(fill="x", padx=16, pady=(12, 4))
-        ctk.CTkLabel(top, text="PROFIT PER SESSION", font=font(11, "bold"), text_color=MUTED).pack(side="left")
-        self.legend = ctk.CTkFrame(top, fg_color="transparent")
-        self.legend.pack(side="right")
-        for kind in (ABYSS, INCURSION):
-            ctk.CTkFrame(self.legend, width=10, height=10, corner_radius=2, fg_color=KIND_COLOR[kind]).pack(
-                side="left", padx=(12, 6)
+        top.pack(fill="x", padx=18, pady=(14, 6))
+        self.chart_title = ctk.CTkLabel(top, text="", font=font(13), text_color=t.soft, height=18)
+        self.chart_title.pack(side="left")
+        for kind in (INCURSION, ABYSS):  # packed from the right
+            ctk.CTkLabel(top, text=KIND_NAME[kind], font=font(13), text_color=t.soft, height=18).pack(
+                side="right", padx=(0, 0 if kind == INCURSION else 18)
             )
-            ctk.CTkLabel(self.legend, text=KIND_NAME[kind], font=font(12), text_color=INK_2).pack(side="left")
-        self.chart = ProfitChart(chart_card)
+            ctk.CTkFrame(top, width=10, height=10, corner_radius=2, fg_color=KIND_COLOR[kind]).pack(
+                side="right", padx=(0, 6)
+            )
+        self.chart = ProfitChart(chart_card, t)
         self.chart.pack(fill="x", padx=12, pady=(0, 12))
 
-        self.table = RunLog(
-            self,
-            [("Date", 170, "w"), ("Type", 130, "w"), ("Runs", 60, "e"), ("Time", 0, "e"),
-             ("Profit", 120, "e"), ("ISK / hr", 120, "e")],
+        rates_card = ctk.CTkFrame(middle, fg_color=t.panel, corner_radius=12)
+        rates_card.grid(row=0, column=1, sticky="nsew")
+        ctk.CTkLabel(rates_card, text="ISK / hour by weather", font=font(13), text_color=t.soft, height=18).pack(
+            anchor="w", padx=18, pady=(14, 8)
+        )
+        self.rates = WeatherRates(rates_card, t)
+        self.rates.pack(fill="x", padx=18, pady=(0, 12))
+
+        self.table = SessionTable(
+            self, t,
+            [("Date", 170, "w"), ("Weather", 170, "w"), ("Tier", 120, "w"), ("Runs", 60, "e"), ("Time", 0, "e"),
+             ("Profit", 110, "e"), ("ISK / hr", 110, "e")],
             self.delete_session,
         )
-        self.table.pack(fill="both", expand=True)
+        self.table.pack(fill="both", expand=True, pady=(14, 0))
 
     def refresh(self):
-        kind = self.FILTERS[self.filter.get()]
+        name = self.filter.get()
+        kind = self.FILTERS[name]
         totals = self.tracker.totals(kind)
-        self.cards["profit"].set(signed_isk(totals.profit), profit_color(totals.profit))
-        self.cards["rate"].set(format_isk(totals.isk_per_hour))
-        self.cards["runs"].set(str(totals.runs))
-        self.cards["time"].set(format_minutes(totals.minutes))
-        self.cards["sessions"].set(str(totals.sessions))
+        self.net_label.configure(text=f"{'ALL ACTIVITY' if kind is None else name.upper()}  ·  NET PROFIT")
+        self.net.configure(text=signed_isk(totals.profit),
+                           text_color=self.theme.accent if totals.profit >= 0 else CRITICAL_TEXT)
+        for key, label, value in (
+            ("rate", "ISK / hour", format_isk(totals.isk_per_hour)),
+            ("runs", "Sites" if kind == INCURSION else "Runs", str(totals.runs)),
+            ("time", "Time", format_minutes(totals.minutes)),
+            ("wins", "Winning sessions", f"{totals.wins} / {totals.sessions}"),
+        ):
+            self.cells[key][0].configure(text=label)
+            self.cells[key][1].configure(text=value)
 
         sessions = [s for s in self.tracker.sessions(kind) if s.runs]
-        if kind:
-            self.legend.pack_forget()
-        else:
-            self.legend.pack(side="right")
-        self.chart.show(sessions)
+        dated = [s.started_at for s in sessions if s.started_at.year != 1970]
+        self.span.configure(text=_date_span(min(dated), max(dated)) if dated else "")
+
+        shown = sessions[:self.CHART_SESSIONS]
+        self.chart_title.configure(
+            text=f"Profit per session  ·  {'last ' if len(sessions) > len(shown) else ''}"
+                 f"{len(shown)} session{'s' if len(shown) != 1 else ''}"
+        )
+        self.chart.show(shown)
+
+        # Every weather and incursions, dimming the ones the filter leaves out
+        by_weather = self.tracker.totals_by_weather()
+        incursions = self.tracker.totals(INCURSION)
+        rates = [(w, by_weather.get(w), theme_for(ABYSS, w).accent, kind == INCURSION) for w in WEATHERS]
+        rates.append(("Incursion", incursions if incursions.sessions else None, theme_for(INCURSION, None).accent,
+                      kind == ABYSS))
+        best = best_weather(by_weather)
+        self.rates.show(rates, f"Best: {best} at {format_isk(by_weather[best].isk_per_hour)}/hr" if best
+                        else "Best: log abyss runs with a weather to compare")
+
         rows = []
         for s in sessions[:300]:
-            kind_label = KIND_NAME[s.kind] + (" · live" if s.active else " · txt" if s.imported else "")
+            status = " · live" if s.active else " · txt" if s.imported else ""
             rows.append((s.id, [
-                ("undated" if s.started_at.year == 1970 else f"{s.started_at:%d %b %Y  %H:%M}", INK_2),
-                (kind_label, GOOD_TEXT if s.active else INK_2),
-                (str(s.runs), INK_2),
-                (format_minutes(s.minutes), INK_2),
+                ("undated" if s.started_at.year == 1970 else f"{s.started_at:%d %b %Y  %H:%M}", self.theme.soft),
+                (session_label(s) + status, GOOD_TEXT if s.active else INK, session_color(s)),
+                (tier_label(s.tier) if s.tier is not None else "—", self.theme.soft),
+                (str(s.runs), INK),
+                (format_minutes(s.minutes), INK),
                 (signed_isk(s.profit), profit_color(s.profit)),
                 (format_isk(s.isk_per_hour), INK),
             ]))
@@ -1104,6 +1205,12 @@ class HistoryPage(ctk.CTkFrame):
             return
         messagebox.showinfo("Import", f"Imported {count} session{'s' if count != 1 else ''}.", parent=self)
         self.app.refresh()
+
+
+def _date_span(first, last):
+    """'01 Sep to 23 Oct 2026', with both years when they differ."""
+    start = f"{first:%d %b}" if first.year == last.year else f"{first:%d %b %Y}"
+    return f"{start} to {last:%d %b %Y}"
 
 
 class App(ctk.CTk):
