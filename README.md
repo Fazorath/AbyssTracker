@@ -112,7 +112,7 @@ them to a release. The app icon is drawn by `make_icon.py`; files in `assets/` a
 Run the tests:
 ```bash
 cd EveProfitManager
-python -m unittest test_core
+python -m unittest discover
 ```
 
 ## Contributing
