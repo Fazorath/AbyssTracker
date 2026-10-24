@@ -1,8 +1,10 @@
 import os
+import tkinter
+import tkinter.font
 import unittest
 
 from core import ABYSS, INCURSION, WEATHERS
-from theme import asset_path, theme_for
+from theme import FONT_FAMILY, FONT_FILES, asset_path, load_fonts, theme_for, ui_family
 
 
 class ThemeTest(unittest.TestCase):
@@ -34,6 +36,30 @@ class ThemeTest(unittest.TestCase):
     def test_asset_path_finds_the_bundled_icon(self):
         for name in ("icon.png", "icon.ico", "icon.icns"):
             self.assertTrue(os.path.isfile(asset_path(name)), name)
+
+    def test_ui_font_and_its_licence_are_bundled(self):
+        for path in FONT_FILES + [asset_path("fonts/OFL.txt")]:
+            self.assertTrue(os.path.isfile(path), path)
+        self.assertEqual(len(FONT_FILES), 2)
+
+    def test_ui_family_uses_chakra_petch_when_tk_has_it(self):
+        self.assertEqual(ui_family(("Helvetica", "Chakra Petch"), "Roboto"), "Chakra Petch")
+
+    def test_ui_family_falls_back_when_the_font_did_not_load(self):
+        self.assertEqual(ui_family(("Helvetica", "Arial"), "Roboto"), "Roboto")
+        self.assertEqual(ui_family((), "Roboto"), "Roboto")
+
+    def test_load_fonts_makes_chakra_petch_available_to_tk(self):
+        loaded = load_fonts()
+        try:
+            root = tkinter.Tk()
+        except tkinter.TclError as err:  # no display, e.g. headless Linux CI
+            self.skipTest(f"Tk cannot open a window: {err}")
+        try:
+            self.assertTrue(loaded)
+            self.assertIn(FONT_FAMILY, tkinter.font.families(root))
+        finally:
+            root.destroy()
 
 
 if __name__ == "__main__":

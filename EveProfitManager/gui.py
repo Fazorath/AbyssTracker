@@ -8,6 +8,7 @@ import sys
 import time
 import tkinter as tk
 from tkinter import filedialog, messagebox
+from tkinter import font as tkfont
 
 import customtkinter as ctk
 
@@ -24,7 +25,7 @@ from core import (
     isk_per_hour,
     tier_label,
 )
-from theme import NEUTRAL_THEME, asset_path, theme_for
+from theme import NEUTRAL_THEME, asset_path, load_fonts, theme_for, ui_family
 
 # Text colours shared by every theme
 INK = "#f0efec"
@@ -85,8 +86,17 @@ def profit_color(millions):
     return GOOD_TEXT if millions > 0 else CRITICAL_TEXT if millions < 0 else INK_2
 
 
+# Font family of every widget and canvas; App.use_ui_font() sets it once Tk is up
+UI_FAMILY = "TkDefaultFont"
+
+
 def font(size=13, weight="normal"):
     return ctk.CTkFont(size=size, weight=weight)
+
+
+def canvas_font(size, weight="normal"):
+    """Font for tk.Canvas text, in the same family as the CTk widgets."""
+    return (UI_FAMILY, size, weight)
 
 
 def mix(color, other, amount):
@@ -124,9 +134,14 @@ class TimerPanel(tk.Canvas):
         self.theme = NEUTRAL_THEME
 
         self.rings = [self.create_oval(0, 0, 0, 0, width=1, dash=dash or ()) for _, dash in self.RINGS]
-        self.caption = self.create_text(0, 0, text="", font=("TkDefaultFont", -14))
-        self.display = self.create_text(0, 0, text="", font=("Consolas", -132, "bold"))
-        self.hint = self.create_text(0, 0, text="", font=("TkDefaultFont", -15))
+        self.caption = self.create_text(0, 0, text="", font=canvas_font(-14))
+        # One canvas item per character, each in a fixed-width cell, so the
+        # proportional digits don't shift the countdown as they change
+        self.digit_font = tkfont.Font(self, family=UI_FAMILY, size=-132, weight="bold")
+        self.digit_width = max(self.digit_font.measure(d) for d in "0123456789")
+        self.display = []
+        self.display_at = (0, 0)  # centre of the countdown, set by _layout
+        self.hint = self.create_text(0, 0, text="", font=canvas_font(-15))
         self.buttons = ctk.CTkFrame(self)
         self.toggle_btn = ctk.CTkButton(self.buttons, text="Start", width=140, height=46, font=font(16, "bold"),
                                         command=self.toggle)
@@ -190,9 +205,28 @@ class TimerPanel(tk.Canvas):
             r = share * h
             self.coords(ring, cx - r, cy - r, cx + r, cy + r)
         self.coords(self.caption, cx, cy - 100)
-        self.coords(self.display, cx, cy - 18)
+        self.display_at = (cx, cy - 18)
+        self._place_display()
         self.coords(self.hint, cx, cy + 62)
         self.coords(self.button_window, cx, cy + 122)
+
+    def _show_display(self, text, color):
+        while len(self.display) < len(text):
+            self.display.append(self.create_text(0, 0, font=self.digit_font))
+        while len(self.display) > len(text):
+            self.delete(self.display.pop())
+        for item, char in zip(self.display, text):
+            self.itemconfigure(item, text=char, fill=color)
+        self._place_display()
+
+    def _place_display(self):
+        chars = [self.itemcget(item, "text") for item in self.display]
+        widths = [self.digit_width if c.isdigit() else self.digit_font.measure(c) for c in chars]
+        cx, y = self.display_at
+        x = cx - sum(widths) / 2
+        for item, width in zip(self.display, widths):
+            self.coords(item, x + width / 2, y)
+            x += width
 
     def _tick(self):
         if self._job:
@@ -212,7 +246,7 @@ class TimerPanel(tk.Canvas):
                 color = CRITICAL_TEXT
             elif seconds < 300:
                 color = WARNING
-        self.itemconfigure(self.display, text=f"{mins:02d}:{secs:02d}", fill=color)
+        self._show_display(f"{mins:02d}:{secs:02d}", color)
 
         if self.countdown and elapsed > 0 and seconds <= 0:
             hint = "Timer expired"
@@ -834,7 +868,7 @@ class ProfitChart(tk.Canvas):
         if w < 50:
             return
         if not self.sessions:
-            self.create_text(w / 2, h / 2, text="No sessions yet", fill=t.soft, font=("TkDefaultFont", 11))
+            self.create_text(w / 2, h / 2, text="No sessions yet", fill=t.soft, font=canvas_font(11))
             return
         top = max(0.0, max(s.profit for s in self.sessions))
         bottom = min(0.0, min(s.profit for s in self.sessions))
@@ -851,7 +885,7 @@ class ProfitChart(tk.Canvas):
             self.create_line(self.PAD_L, y(v), w - self.PAD_R, y(v),
                              fill=t.line if v == 0 else mix(t.line, t.panel, 0.5))
             self.create_text(self.PAD_L - 10, y(v), text=format_isk(v), anchor="e", fill=t.soft,
-                             font=("TkDefaultFont", 9))
+                             font=canvas_font(9))
             v += step
 
         slot = (w - self.PAD_L - self.PAD_R) / len(self.sessions)
@@ -864,7 +898,7 @@ class ProfitChart(tk.Canvas):
             self.bars.append((self.PAD_L + slot * i, self.PAD_L + slot * (i + 1), s, cx))
             if (i % label_every == 0 and last - i >= label_every) or i == last:
                 self.create_text(cx, h - self.PAD_B + 14, text=f"{s.started_at:%d %b}", fill=t.soft,
-                                 font=("TkDefaultFont", 9))
+                                 font=canvas_font(9))
 
     def _bar(self, x0, x1, base, end, color):
         """Bar anchored to the baseline with a rounded data end."""
@@ -901,7 +935,7 @@ class ProfitChart(tk.Canvas):
         ]
         self.create_line(cx, self.PAD_T, cx, self.winfo_height() - self.PAD_B, fill=t.line, dash=(2, 3), tags="tip")
         text = self.create_text(0, 0, text="\n".join(lines), anchor="nw", fill=INK,
-                                font=("TkDefaultFont", 10), tags="tip")
+                                font=canvas_font(10), tags="tip")
         bx0, by0, bx1, by1 = self.bbox(text)
         tw, th = bx1 - bx0 + 34, by1 - by0 + 16
         tx = cx + 12 if cx + 12 + tw < self.winfo_width() else cx - 12 - tw
@@ -968,16 +1002,16 @@ class WeatherRates(tk.Canvas):
         for i, (name, totals, accent, dimmed) in enumerate(self.rows):
             fade = (lambda c: mix(c, t.panel, 0.55)) if dimmed else (lambda c: c)
             y = self.ROW * i + self.ROW / 2
-            self.create_text(0, y, text=name, anchor="w", fill=fade(INK), font=("TkDefaultFont", 12))
+            self.create_text(0, y, text=name, anchor="w", fill=fade(INK), font=canvas_font(12))
             self._pill(x0, x1, y, fade(mix(INK, t.panel, 0.92)))
             if totals:
                 rate = totals.isk_per_hour
                 self._pill(x0, x0 + max(10, (x1 - x0) * abs(rate) / widest), y,
                            fade(accent if rate >= 0 else CRITICAL_TEXT))
             self.create_text(w, y, text=format_isk(totals.isk_per_hour) if totals else "—", anchor="e",
-                             fill=fade(INK), font=("TkDefaultFont", 12, "bold"))
+                             fill=fade(INK), font=canvas_font(12, "bold"))
         self.create_text(0, self.ROW * len(self.rows) + self.BEST / 2, text=self.best, anchor="w", fill=t.soft,
-                         font=("TkDefaultFont", 11))
+                         font=canvas_font(11))
 
     def _pill(self, x0, x1, y, color):
         r = 5
@@ -1224,6 +1258,7 @@ class App(ctk.CTk):
         self.geometry("1180x800")
         self.minsize(1000, 700)
         self.set_icon()
+        self.use_ui_font()
 
         self.header = ctk.CTkFrame(self, fg_color="transparent")
         self.header.pack(fill="x", padx=32, pady=(22, 0))
@@ -1254,6 +1289,17 @@ class App(ctk.CTk):
         active = next((k for k in ("abyss", "incursion") if self.pages[k].session_id), "abyss")
         self.show(active)
         self.after(150, self.bring_to_front)
+
+    def use_ui_font(self):
+        """
+        Draw every widget in the bundled font, or in the platform's UI font when
+        it did not load. Runs before any widget exists, as CTkFont reads the
+        default family when each font is created.
+        """
+        global UI_FAMILY
+        fallback = tkfont.nametofont("TkDefaultFont", root=self).actual("family")
+        UI_FAMILY = ui_family(tkfont.families(self), fallback)
+        ctk.ThemeManager.theme["CTkFont"]["family"] = UI_FAMILY
 
     def set_icon(self):
         """Window and taskbar icon: .ico on Windows, PNG elsewhere."""
@@ -1313,6 +1359,7 @@ def main():
         )
     ctk.set_appearance_mode("dark")
     ctk.set_default_color_theme("dark-blue")
+    load_fonts()
     App().mainloop()
 
 
