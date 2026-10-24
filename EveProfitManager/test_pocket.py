@@ -4,12 +4,14 @@ import tkinter
 import unittest
 
 from core import ABYSS, INCURSION, Tracker
+from theme import load_fonts
 
 
 class PocketOverlayTest(unittest.TestCase):
     """Drives the pocket overlay through its buttons, as a user would."""
 
     def setUp(self):
+        load_fonts()  # as the app does, before the first Tk: macOS reads the font list only then
         try:
             tkinter.Tk().destroy()
         except tkinter.TclError as err:  # no display, e.g. headless Linux CI
