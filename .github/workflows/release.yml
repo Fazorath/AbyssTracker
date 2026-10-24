@@ -1,0 +1,70 @@
+# Build the desktop app for Windows and macOS when a version tag is pushed,
+# and attach both to a GitHub release for that tag.
+#   git tag v1.0.0 && git push origin v1.0.0
+# Pull requests that touch the build only build, so packaging breaks show up before a tag.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    paths:
+      - ".github/workflows/release.yml"
+      - "EveProfitManager/AbyssTracker.spec"
+      - "EveProfitManager/assets/**"
+      - "requirements.txt"
+  workflow_dispatch:  # manual run builds the artifacts without releasing
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            asset: AbyssTracker-windows.exe
+          - os: macos-latest
+            asset: AbyssTracker-macos.zip
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: EveProfitManager
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r ../requirements.txt pyinstaller==6.22.3
+      - run: python -m unittest test_core test_theme
+      - run: pyinstaller --noconfirm AbyssTracker.spec
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        run: mv dist/AbyssTracker.exe ${{ matrix.asset }}
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        run: ditto -c -k --keepParent dist/AbyssTracker.app ${{ matrix.asset }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: EveProfitManager/${{ matrix.asset }}
+          if-no-files-found: error
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "$GITHUB_REF_NAME" AbyssTracker-*
+          --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes

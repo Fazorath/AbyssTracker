@@ -4,6 +4,7 @@ Desktop UI for the Abyss and Incursion tracker.
 Run with:  python gui.py
 """
 import math
+import sys
 import time
 import tkinter as tk
 from tkinter import filedialog, messagebox
@@ -23,7 +24,7 @@ from core import (
     isk_per_hour,
     tier_label,
 )
-from theme import NEUTRAL_THEME, theme_for
+from theme import NEUTRAL_THEME, asset_path, theme_for
 
 # Text colours shared by every theme
 INK = "#f0efec"
@@ -1222,6 +1223,7 @@ class App(ctk.CTk):
         self.title("Abyss Tracker")
         self.geometry("1180x800")
         self.minsize(1000, 700)
+        self.set_icon()
 
         self.header = ctk.CTkFrame(self, fg_color="transparent")
         self.header.pack(fill="x", padx=32, pady=(22, 0))
@@ -1252,6 +1254,15 @@ class App(ctk.CTk):
         active = next((k for k in ("abyss", "incursion") if self.pages[k].session_id), "abyss")
         self.show(active)
         self.after(150, self.bring_to_front)
+
+    def set_icon(self):
+        """Window and taskbar icon: .ico on Windows, PNG elsewhere."""
+        if sys.platform == "win32":
+            self.iconbitmap(asset_path("icon.ico"))
+        else:
+            # Keep a reference: Tk drops the image once Python garbage-collects it
+            self.icon = tk.PhotoImage(file=asset_path("icon.png"))
+            self.iconphoto(True, self.icon)
 
     def bring_to_front(self):
         """macOS often opens Tk windows behind the terminal; raise and focus it."""

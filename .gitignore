@@ -5,3 +5,4 @@ build/
 dist/
 *.spec
 .venv/
+!EveProfitManager/AbyssTracker.spec

@@ -2,8 +2,17 @@
 Filament theme: colour tokens per abyssal weather, used by the desktop UI.
 """
 from dataclasses import dataclass
+from pathlib import Path
 
 from core import ABYSS, INCURSION
+
+# Icon and other files the UI loads; PyInstaller bundles this folder next to the code
+ASSETS = Path(__file__).resolve().parent / "assets"
+
+
+def asset_path(name):
+    """Absolute path of a file in the assets folder."""
+    return str(ASSETS / name)
 
 
 @dataclass(frozen=True)

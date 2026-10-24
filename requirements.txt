@@ -1,4 +1,4 @@
 # pip install -r requirements.txt
 colorama==0.4.6
 customtkinter==5.2.2
-# Optional, to build an .exe:  pip install pyinstaller
+# Optional, to build the standalone app:  pip install pyinstaller
