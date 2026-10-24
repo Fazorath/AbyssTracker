@@ -212,9 +212,10 @@ class TimerPanel(ctk.CTkFrame):
 class RunLog(ctk.CTkFrame):
     """Table of the runs/sites in the current session, newest first."""
 
-    def __init__(self, master, columns, on_delete):
+    def __init__(self, master, columns, on_delete, on_edit=None):
         super().__init__(master, fg_color=SURFACE, corner_radius=10, border_width=1, border_color=BORDER)
         self.columns = columns  # list of (heading, width, anchor)
+        self.on_edit = on_edit
         self.on_delete = on_delete
         header = ctk.CTkFrame(self, fg_color="transparent", height=32)
         header.pack(fill="x", padx=12, pady=(10, 0))
@@ -231,7 +232,8 @@ class RunLog(ctk.CTkFrame):
     def _layout(self, frame):
         for i, (_, width, _) in enumerate(self.columns):
             frame.grid_columnconfigure(i, minsize=width, weight=1 if width == 0 else 0)
-        frame.grid_columnconfigure(len(self.columns), minsize=36)
+        for i in range(len(self.columns), len(self.columns) + (2 if self.on_edit else 1)):
+            frame.grid_columnconfigure(i, minsize=36)
 
     def show(self, rows, empty_text):
         """
@@ -255,10 +257,69 @@ class RunLog(ctk.CTkFrame):
                 ctk.CTkLabel(row, text=text, text_color=color, font=font(13), anchor=self.columns[i][2]).grid(
                     row=0, column=i, sticky="ew", padx=6, pady=3
                 )
-            ctk.CTkButton(
-                row, text="×", width=28, height=24, fg_color="transparent", hover_color=BORDER,
-                text_color=MUTED, command=lambda r=run_id: self.on_delete(r),
-            ).grid(row=0, column=len(cells), padx=(4, 0))
+            actions = [("×", self.on_delete)]
+            if self.on_edit:
+                actions.insert(0, ("✎", self.on_edit))
+            for i, (text, action) in enumerate(actions):
+                ctk.CTkButton(
+                    row, text=text, width=28, height=24, fg_color="transparent", hover_color=BORDER,
+                    text_color=MUTED, command=lambda r=run_id, a=action: a(r),
+                ).grid(row=0, column=len(cells) + i, padx=(4, 0))
+
+
+class EditRunDialog(ctk.CTkToplevel):
+    """
+    Modal form for correcting a logged run or site.
+
+    on_save gets the typed values and returns the updated run, or raises
+    ValueError to keep the dialog open with the message shown.
+    """
+
+    def __init__(self, master, title, fields, accent, on_save):
+        super().__init__(master, fg_color=SURFACE)
+        self.title(title)
+        self.resizable(False, False)
+        self.on_save = on_save
+        form = ctk.CTkFrame(self, fg_color="transparent")
+        form.pack(padx=24, pady=(20, 0), anchor="w")
+        self.entries = []
+        for column, (label, value) in enumerate(fields):
+            ctk.CTkLabel(form, text=label, font=font(12), text_color=INK_2).grid(
+                row=0, column=column, sticky="w", padx=(0, 12)
+            )
+            entry = ctk.CTkEntry(form, width=170, height=36, font=font(15), fg_color=PAGE, border_color=AXIS)
+            entry.insert(0, value)
+            entry.grid(row=1, column=column, sticky="w", padx=(0, 12), pady=(2, 0))
+            entry.bind("<Return>", lambda _e: self.save())
+            entry.bind("<Escape>", lambda _e: self.destroy())
+            self.entries.append(entry)
+        self.message = ctk.CTkLabel(self, text="", text_color=CRITICAL_TEXT, font=font(12), height=16)
+        self.message.pack(anchor="w", padx=24, pady=(8, 0))
+        buttons = ctk.CTkFrame(self, fg_color="transparent")
+        buttons.pack(anchor="w", padx=24, pady=(4, 20))
+        ctk.CTkButton(
+            buttons, text="Save", width=110, height=36, font=font(14, "bold"),
+            fg_color=accent[0], hover_color=accent[1], command=self.save,
+        ).pack(side="left")
+        ctk.CTkButton(
+            buttons, text="Cancel", width=90, height=36, fg_color="transparent", border_width=1,
+            border_color=AXIS, hover_color=BORDER, text_color=INK_2, command=self.destroy,
+        ).pack(side="left", padx=8)
+        self.transient(master.winfo_toplevel())
+        self.after(50, self._focus)
+
+    def _focus(self):
+        self.grab_set()
+        self.entries[0].focus_set()
+        self.entries[0].select_range(0, "end")
+
+    def save(self):
+        try:
+            self.on_save(*(entry.get() for entry in self.entries))
+        except ValueError as err:
+            self.message.configure(text=str(err))
+            return
+        self.destroy()
 
 
 class SessionPage(ctk.CTkFrame):
@@ -341,7 +402,7 @@ class SessionPage(ctk.CTkFrame):
         self.timer = self.build_timer(middle)
         self.timer.grid(row=0, column=1, sticky="nsew")
 
-        self.log_table = RunLog(self.live_view, self.log_columns(), self.delete_run)
+        self.log_table = RunLog(self.live_view, self.log_columns(), self.delete_run, self.edit_run)
         self.log_table.pack(fill="both", expand=True)
 
         for entry in self.entries():
@@ -360,6 +421,8 @@ class SessionPage(ctk.CTkFrame):
     def update_cards(self, session, runs): ...
     def run_cells(self, index, run): return []
     def after_log(self): ...
+    def edit_fields(self, run): return []
+    def save_edit(self, run, *values): ...
 
     # --- shared behaviour -------------------------------------------------
 
@@ -446,6 +509,24 @@ class SessionPage(ctk.CTkFrame):
             raise ValueError(f"Enter {field}, or use the timer")
         self.used_timer = True
         return value
+
+    def edit_run(self, run_id):
+        run = self.tracker.run(run_id)
+        if run is None:
+            return
+
+        def save(*values):
+            edited = self.save_edit(run, *values)
+            self.flash(
+                f"Updated to {signed_isk(edited.profit)} in {format_minutes(edited.minutes)}",
+                profit_color(edited.profit),
+            )
+            self.app.refresh()
+
+        EditRunDialog(
+            self, f"Edit {self.unit}", self.edit_fields(run),
+            (KIND_COLOR[self.kind], KIND_HOVER[self.kind]), save,
+        )
 
     def delete_run(self, run_id):
         run = self.tracker.run(run_id)
@@ -538,6 +619,14 @@ class AbyssPage(SessionPage):
         self.after_isk.delete(0, "end")
         self.time_left.delete(0, "end")
 
+    def edit_fields(self, run):
+        return [("Wallet after run (M)", f"{run.isk_after:g}"), ("Time left (min)", f"{MAXTIME - run.minutes:g}")]
+
+    def save_edit(self, run, isk_after, time_left):
+        return self.tracker.edit_abyss_run(
+            run.id, parse_isk(isk_after, "wallet after"), parse_minutes(time_left, "time left")
+        )
+
     def update_cards(self, session, runs):
         avg = session.profit / session.runs if session.runs else 0
         self.cards["profit"].set(signed_isk(session.profit), profit_color(session.profit),
@@ -613,6 +702,14 @@ class IncursionPage(SessionPage):
 
     def after_log(self):
         self.minutes.delete(0, "end")
+
+    def edit_fields(self, run):
+        return [("Payout (M)", f"{run.profit:g}"), ("Site time (min)", f"{run.minutes:g}")]
+
+    def save_edit(self, run, payout, minutes):
+        return self.tracker.edit_incursion_site(
+            run.id, parse_isk(payout, "payout"), parse_minutes(minutes, "site time")
+        )
 
     def update_cards(self, session, runs):
         self.cards["profit"].set(signed_isk(session.profit), profit_color(session.profit))

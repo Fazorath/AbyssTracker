@@ -29,7 +29,7 @@ This program is designed to help users track their profits and time spent during
     20-minute timer. A built-in abyssal countdown can fill in the time for you (leave the field blank).
   - **Incursion page:** set the payout per site (remembered between sessions) and log each site's time, typed or
     from the built-in stopwatch.
-  - Live stat cards for session profit, **ISK/hour**, runs, time and wallet, plus a run log you can delete mistakes from.
+  - Live stat cards for session profit, **ISK/hour**, runs, time and wallet, plus a run log where you can fix (✎) or delete mistakes.
   - **History page:** lifetime totals, a profit-per-session chart with hover details, and every past session,
     filterable by Abyss/Incursion. Old `Sessions.txt` files can be imported.
   - Every run is saved immediately, so closing the app mid-session picks up where you left off.

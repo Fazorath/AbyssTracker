@@ -89,6 +89,52 @@ class TrackerTest(unittest.TestCase):
         self.assertEqual((session.runs, session.profit), (2, 100))
         self.assertEqual(self.tracker.current_isk(sid), 1100)
 
+    def test_editing_abyss_run_wallet_rebases_next_run(self):
+        sid = self.tracker.start_session(ABYSS, starting_isk=1000)
+        self.tracker.log_abyss_run(sid, 1000, 1030, time_left=10)
+        typo = self.tracker.log_abyss_run(sid, 1030, 1600, time_left=10)  # meant 1060
+        last = self.tracker.log_abyss_run(sid, 1600, 1100, time_left=10)
+        edited = self.tracker.edit_abyss_run(typo.id, 1060, time_left=4)
+        self.assertEqual((edited.profit, edited.minutes, edited.isk_after), (30, 16, 1060))
+        self.assertEqual(self.tracker.run(last.id).profit, 40)
+        session = self.tracker.session(sid)
+        self.assertEqual((session.runs, session.profit, session.minutes), (3, 100, 36))
+        self.assertEqual(self.tracker.current_isk(sid), 1100)
+
+    def test_bad_abyss_edits_are_rejected(self):
+        sid = self.tracker.start_session(ABYSS, starting_isk=1000)
+        run = self.tracker.log_abyss_run(sid, 1000, 1030, time_left=10)
+        site = self.tracker.log_incursion_site(self.tracker.start_session(INCURSION), 31, 10)
+        for run_id, isk_after, time_left in (
+            (run.id, 1030, 25),
+            (run.id, 1030, -1),
+            (run.id, float("nan"), 5),
+            (site.id, 1030, 5),
+        ):
+            with self.assertRaises(ValueError):
+                self.tracker.edit_abyss_run(run_id, isk_after, time_left)
+        self.assertEqual(self.tracker.run(run.id), run)
+        self.assertEqual(self.tracker.run(site.id), site)
+
+    def test_editing_incursion_site(self):
+        sid = self.tracker.start_session(INCURSION)
+        self.tracker.log_incursion_site(sid, 31, 10)
+        typo = self.tracker.log_incursion_site(sid, 310, 12)
+        edited = self.tracker.edit_incursion_site(typo.id, 31, 14)
+        self.assertEqual((edited.profit, edited.minutes), (31, 14))
+        session = self.tracker.session(sid)
+        self.assertEqual((session.runs, session.profit, session.minutes), (2, 62, 24))
+
+    def test_bad_incursion_edits_are_rejected(self):
+        site = self.tracker.log_incursion_site(self.tracker.start_session(INCURSION), 31, 10)
+        sid = self.tracker.start_session(ABYSS, starting_isk=1000)
+        run = self.tracker.log_abyss_run(sid, 1000, 1030, time_left=10)
+        for run_id, profit, minutes in ((site.id, 31, -1), (site.id, float("inf"), 10), (run.id, 31, 10)):
+            with self.assertRaises(ValueError):
+                self.tracker.edit_incursion_site(run_id, profit, minutes)
+        self.assertEqual(self.tracker.run(site.id), site)
+        self.assertEqual(self.tracker.run(run.id), run)
+
     def test_non_finite_values_are_rejected(self):
         abyss = self.tracker.start_session(ABYSS, starting_isk=100)
         inc = self.tracker.start_session(INCURSION)
