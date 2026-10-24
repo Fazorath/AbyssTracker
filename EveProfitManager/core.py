@@ -254,16 +254,14 @@ class Tracker:
         Returns:
             Run: The recorded run.
         """
-        _require_finite(isk_before, isk_after, time_left)
-        if not 0 <= time_left <= MAXTIME:
-            raise ValueError(f"Time left must be between 0 and {MAXTIME:g} minutes")
+        _require_finite(isk_before, isk_after)
+        _require_time_left(time_left)
         return self._add_run(session_id, isk_after - isk_before, MAXTIME - time_left, isk_after)
 
     def log_incursion_site(self, session_id, profit, minutes):
         """Record one incursion site."""
-        _require_finite(profit, minutes)
-        if minutes < 0:
-            raise ValueError("Time can't be negative")
+        _require_finite(profit)
+        _require_minutes(minutes)
         return self._add_run(session_id, profit, minutes, None)
 
     def _add_run(self, session_id, profit, minutes, isk_after, count=1, recorded_at=None):
@@ -295,17 +293,63 @@ class Tracker:
             return
         with self.db:
             if run.isk_after is not None:
-                after = self.db.execute(
-                    "SELECT id, isk_after FROM runs WHERE session_id = ? AND id > ? "
-                    "AND isk_after IS NOT NULL ORDER BY id LIMIT 1",
-                    (run.session_id, run_id),
-                ).fetchone()
+                after = self._next_abyss_run(run)
                 if after:
                     before = run.isk_after - run.profit
                     self.db.execute(
                         "UPDATE runs SET profit = ? WHERE id = ?", (after["isk_after"] - before, after["id"])
                     )
             self.db.execute("DELETE FROM runs WHERE id = ?", (run_id,))
+
+    def edit_abyss_run(self, run_id, isk_after, time_left):
+        """
+        Correct an abyssal run's wallet or timer. The wallet before the run stays
+        as it was, and the next run's profit is re-based on the corrected wallet.
+
+        Args:
+            run_id (int): Abyssal run to change.
+            isk_after (float): Corrected wallet after the run.
+            time_left (float): Corrected minutes left on the abyssal timer.
+
+        Returns:
+            Run: The updated run.
+        """
+        _require_finite(isk_after)
+        _require_time_left(time_left)
+        run = self.run(run_id)
+        if run is None or run.isk_after is None:
+            raise ValueError("Only abyssal runs have a wallet to correct")
+        before = run.isk_after - run.profit
+        with self.db:
+            self.db.execute(
+                "UPDATE runs SET profit = ?, minutes = ?, isk_after = ? WHERE id = ?",
+                (isk_after - before, MAXTIME - time_left, isk_after, run_id),
+            )
+            after = self._next_abyss_run(run)
+            if after:
+                self.db.execute(
+                    "UPDATE runs SET profit = ? WHERE id = ?", (after["isk_after"] - isk_after, after["id"])
+                )
+        return self.run(run_id)
+
+    def edit_incursion_site(self, run_id, profit, minutes):
+        """Correct an incursion site's payout or time."""
+        _require_finite(profit)
+        _require_minutes(minutes)
+        run = self.run(run_id)
+        if run is None or self.session(run.session_id).kind != INCURSION:
+            raise ValueError("Only incursion sites have a payout to correct")
+        with self.db:
+            self.db.execute("UPDATE runs SET profit = ?, minutes = ? WHERE id = ?", (profit, minutes, run_id))
+        return self.run(run_id)
+
+    def _next_abyss_run(self, run):
+        """The abyssal run after this one in its session, whose profit chains off its wallet."""
+        return self.db.execute(
+            "SELECT id, isk_after FROM runs WHERE session_id = ? AND id > ? "
+            "AND isk_after IS NOT NULL ORDER BY id LIMIT 1",
+            (run.session_id, run.id),
+        ).fetchone()
 
     def current_isk(self, session_id):
         """Wallet after the latest abyssal run, or the starting wallet if none yet."""
@@ -460,6 +504,18 @@ def _match(pattern, text, convert, default):
 def _require_finite(*values):
     if not all(isinstance(v, (int, float)) and math.isfinite(v) for v in values):
         raise ValueError("Amounts and times must be real numbers")
+
+
+def _require_minutes(minutes):
+    _require_finite(minutes)
+    if minutes < 0:
+        raise ValueError("Time can't be negative")
+
+
+def _require_time_left(time_left):
+    _require_finite(time_left)
+    if not 0 <= time_left <= MAXTIME:
+        raise ValueError(f"Time left must be between 0 and {MAXTIME:g} minutes")
 
 
 def _require_filament(kind, weather, tier):
