@@ -7,6 +7,12 @@ from esi import EsiClient
 
 # What a sign-in or token refresh can raise for the user to read
 SIGN_IN_ERRORS = (sso.SignInError, sso.InvalidToken, jwt.PyJWTError, requests.RequestException)
+try:
+    import keyring.errors
+
+    SIGN_IN_ERRORS += (keyring.errors.KeyringError,)  # e.g. no usable keychain backend
+except ImportError:
+    pass  # Account.store reports the missing package
 
 
 class Account:

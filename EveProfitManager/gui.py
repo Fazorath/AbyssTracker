@@ -1372,13 +1372,14 @@ class SettingsPage(ctk.CTkFrame):
         self.app.run_async(self.app.account.sign_in, done)
 
     def sign_out(self):
-        try:
-            gone = self.app.account.sign_out()
-        except SIGN_IN_ERRORS as e:
-            self.say(str(e), CRITICAL_TEXT)
-            return
-        self.say(f"Signed out {gone.name}." if gone else "Nobody is signed in.")
-        self.refresh()
+        def done(gone, error):
+            if error is not None:
+                self.say(str(error), CRITICAL_TEXT)
+            else:
+                self.say(f"Signed out {gone.name}." if gone else "Nobody is signed in.")
+            self.refresh()
+
+        self.app.run_async(self.app.account.sign_out, done)  # revoking calls the network
 
 
 class App(ctk.CTk):
