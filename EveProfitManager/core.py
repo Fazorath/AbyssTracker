@@ -41,6 +41,9 @@ CREATE TABLE IF NOT EXISTS runs (
     isk_after REAL,
     count INTEGER NOT NULL DEFAULT 1
 );
+CREATE TABLE IF NOT EXISTS payouts (
+    journal_id INTEGER PRIMARY KEY
+);
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -279,14 +282,54 @@ class Tracker:
         _require_minutes(minutes)
         return self._add_run(session_id, profit, minutes, None)
 
+    def log_incursion_payouts(self, session_id, payouts):
+        """
+        Record each incursion payout from the wallet journal as a site.
+
+        A site's time runs from the session start, or the latest site logged
+        before it was paid, to its payout. Payouts already seen are skipped, so a
+        site deleted afterwards stays deleted.
+
+        Args:
+            session_id (int): Session to add the sites to.
+            payouts (list[journal.Payout]): Payouts in any order.
+
+        Returns:
+            list[Run]: The sites recorded, oldest first.
+        """
+        started_at = self.session(session_id).started_at
+        logged = []
+        for payout in sorted(payouts, key=lambda p: (p.paid_at, p.journal_id)):
+            seen = self.db.execute("SELECT 1 FROM payouts WHERE journal_id = ?", (payout.journal_id,)).fetchone()
+            if seen or payout.paid_at < started_at:
+                continue
+            paid_at = payout.paid_at.isoformat(timespec="seconds")
+            row = self.db.execute(
+                "SELECT MAX(recorded_at) AS last FROM runs WHERE session_id = ? AND recorded_at <= ?",
+                (session_id, paid_at),
+            ).fetchone()
+            since = datetime.fromisoformat(row["last"]) if row["last"] else started_at
+            with self.db:  # the site and its payout are saved together, or neither is
+                self.db.execute("INSERT INTO payouts (journal_id) VALUES (?)", (payout.journal_id,))
+                run_id = self._insert_run(
+                    session_id, payout.millions, (payout.paid_at - since).total_seconds() / 60, None, 1, paid_at
+                )
+            logged.append(self.run(run_id))
+        return logged
+
     def _add_run(self, session_id, profit, minutes, isk_after, count=1, recorded_at=None):
         with self.db:
-            cur = self.db.execute(
-                "INSERT INTO runs (session_id, recorded_at, profit, minutes, isk_after, count) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
-                (session_id, recorded_at or _now(), profit, minutes, isk_after, count),
-            )
-        return self.run(cur.lastrowid)
+            run_id = self._insert_run(session_id, profit, minutes, isk_after, count, recorded_at)
+        return self.run(run_id)
+
+    def _insert_run(self, session_id, profit, minutes, isk_after, count, recorded_at):
+        """Insert a run inside the caller's transaction; returns its id."""
+        cur = self.db.execute(
+            "INSERT INTO runs (session_id, recorded_at, profit, minutes, isk_after, count) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (session_id, recorded_at or _now(), profit, minutes, isk_after, count),
+        )
+        return cur.lastrowid
 
     def run(self, run_id):
         row = self.db.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()

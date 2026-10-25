@@ -27,6 +27,7 @@ from core import (
     tier_label,
 )
 from clock import read_clock
+from journal import get_incursion_payouts
 from location import AbyssWatcher, get_location
 from wallet import get_wallet
 from account import SIGN_IN_ERRORS, Account
@@ -455,6 +456,69 @@ def style_tab(button, label, on, live, theme):
     )
 
 
+class EsiPoller:
+    """
+    A toolbar switch that, while on and a session is live, reads ESI off the UI
+    thread every `poll_ms` and hands each result to `on_result`.
+    """
+
+    def __init__(self, page, text, read, on_result, label, poll_ms, retry_ms, on_start=None):
+        self.page = page
+        self.read = read  # client -> result, run off the UI thread
+        self.on_result = on_result
+        self.label = label  # names the read in error messages
+        self.poll_ms, self.retry_ms = poll_ms, retry_ms
+        self.on_start = on_start
+        self._job = None
+        self._reading = False
+        self.switch = page.paint(
+            ctk.CTkSwitch(page.toolbar, text=text, font=font(13), command=self.toggle),
+            text_color="soft", progress_color="accent",
+        )
+        self.switch.pack(side="left", padx=(0, 12), before=page.toolbar.winfo_children()[0])
+
+    def toggle(self):
+        """Start or stop polling as the switch says."""
+        if self._job:
+            self.page.after_cancel(self._job)
+            self._job = None
+        if not self.switch.get():
+            return
+        client, problem = self.page.signed_in_client()
+        if client is None:
+            self.switch.deselect()
+            self.page.flash(problem, CRITICAL_TEXT)
+            return
+        if self.on_start:
+            self.on_start()
+        self.poll()
+
+    def poll(self):
+        """Read off the UI thread, then schedule the next read."""
+        self._job = None
+        if not self.switch.get():
+            return
+        if self.page.session_id is not None and not self._reading:
+            client, _ = self.page.signed_in_client()
+            if client is not None:
+                self._reading = True
+
+                def done(result, error):
+                    self._reading = False
+                    if not self.switch.get():  # switched off while the read was out
+                        return
+                    if error is not None:
+                        self.page.flash(f"{self.label}: {error}", CRITICAL_TEXT)
+                        if self._job:  # back off rather than repeat the error every poll
+                            self.page.after_cancel(self._job)
+                            self._job = self.page.after(self.retry_ms, self.poll)
+                    else:
+                        self.on_result(result)
+
+                self.page.app.run_async(lambda: self.read(client), done)
+        self._job = self.page.after(self.poll_ms, self.poll)
+
+
 class SessionPage(Painter, ctk.CTkFrame):
     """
     Shared layout for the Abyss and Incursion pages: a start screen and a live session
@@ -558,6 +622,7 @@ class SessionPage(Painter, ctk.CTkFrame):
     def stat_labels(self): return []
     def start_args(self): return {}
     def log_run(self): ...
+    def end_note(self): return ""
     def update_stats(self, session, runs): ...
     def timer_caption(self, session): return ""
     def lifetime_totals(self, session): return "", None
@@ -626,7 +691,8 @@ class SessionPage(Painter, ctk.CTkFrame):
         if session.runs and not messagebox.askyesno(
             "End session",
             f"End this {KIND_NAME[self.kind].lower()} session?\n\n"
-            f"{session.runs} {self.unit}s · {signed_isk(session.profit)} ISK · {format_minutes(session.minutes)}",
+            f"{session.runs} {self.unit}s · {signed_isk(session.profit)} ISK · {format_minutes(session.minutes)}"
+            f"{self.end_note()}",
             parent=self,
         ):
             return
@@ -710,6 +776,19 @@ class SessionPage(Painter, ctk.CTkFrame):
             self.tracker.delete_run(run_id)
             self.app.refresh()
 
+    def signed_in_client(self):
+        """The active character's ESI client and None, or None and why there isn't one."""
+        try:
+            client = self.app.account.client()
+        except SIGN_IN_ERRORS as e:
+            return None, str(e)
+        return (client, None) if client else (None, "Sign in under Settings first.")
+
+    def notify(self, text, color=None):
+        self.flash(text, color)
+        if self.app.pocket:
+            self.app.pocket.say(text, color)
+
     def flash(self, text, color=None):
         self.message.configure(text=text, text_color=color or self.theme.soft)
         if self._message_job:
@@ -776,13 +855,11 @@ class AbyssPage(SessionPage):
         super().__init__(master, app)
         self._watcher = AbyssWatcher()
         self._watched_session = None
-        self._poll_job = None
-        self._reading = False
-        self.detect = self.paint(
-            ctk.CTkSwitch(self.toolbar, text="Detect runs from EVE", font=font(13), command=self.toggle_detect),
-            text_color="soft", progress_color="accent",
-        )
-        self.detect.pack(side="left", padx=(0, 12), before=self.toolbar.winfo_children()[0])
+        self.detect = EsiPoller(
+            self, "Detect runs from EVE", lambda client: get_location(client, client.character.id),
+            lambda location: self.see_abyss(location.in_abyss), "Location",
+            self.LOCATION_POLL_MS, self.LOCATION_RETRY_MS, on_start=self.reset_watcher,
+        ).switch
 
     def build_start_form(self, frame):
         self.start_isk = self.field(frame, 0, "Wallet now (million ISK)", 220, "e.g. 1,250 or 1.25b")
@@ -841,53 +918,9 @@ class AbyssPage(SessionPage):
 
         self.app.run_async(lambda: get_wallet(client, client.character.id), done)
 
-    def toggle_detect(self):
-        """Start or stop watching the character's location for abyss entries and exits."""
-        if self._poll_job:
-            self.after_cancel(self._poll_job)
-            self._poll_job = None
-        if not self.detect.get():
-            return
-        client, problem = self.signed_in_client()
-        if client is None:
-            self.detect.deselect()
-            self.flash(problem, CRITICAL_TEXT)
-            return
+    def reset_watcher(self):
+        """Detection switched on: the next reading is a fresh baseline."""
         self._watcher = AbyssWatcher()
-        self.poll_location()
-
-    def signed_in_client(self):
-        """The active character's ESI client and None, or None and why there isn't one."""
-        try:
-            client = self.app.account.client()
-        except SIGN_IN_ERRORS as e:
-            return None, str(e)
-        return (client, None) if client else (None, "Sign in under Settings first.")
-
-    def poll_location(self):
-        """Read the location off the UI thread, then schedule the next read."""
-        self._poll_job = None
-        if not self.detect.get():
-            return
-        if self.session_id is not None and not self._reading:
-            client, _ = self.signed_in_client()
-            if client is not None:
-                self._reading = True
-
-                def done(location, error):
-                    self._reading = False
-                    if not self.detect.get():  # switched off while the read was out
-                        return
-                    if error is not None:
-                        self.flash(f"Location: {error}", CRITICAL_TEXT)
-                        if self._poll_job:  # back off rather than repeat the error every few seconds
-                            self.after_cancel(self._poll_job)
-                            self._poll_job = self.after(self.LOCATION_RETRY_MS, self.poll_location)
-                    else:
-                        self.see_abyss(location.in_abyss)
-
-                self.app.run_async(lambda: get_location(client, client.character.id), done)
-        self._poll_job = self.after(self.LOCATION_POLL_MS, self.poll_location)
 
     def see_abyss(self, in_abyss):
         """Act on a location reading: start the timer on entering, pause it and prompt to log on leaving."""
@@ -907,11 +940,6 @@ class AbyssPage(SessionPage):
             left = self.timer.face().text
             self.notify(f"Left the abyss with {left} left. Enter your wallet and log the run.", self.theme.accent)
             self.after_isk.focus_set()
-
-    def notify(self, text, color=None):
-        self.flash(text, color)
-        if self.app.pocket:
-            self.app.pocket.say(text, color)
 
     def build_timer(self, master):
         return TimerPanel(master, countdown_minutes=MAXTIME)
@@ -977,10 +1005,37 @@ class IncursionPage(SessionPage):
     kind = INCURSION
     subtitle = (
         "Set the payout per site; it's remembered for next time. Log each site with its time, "
-        "or run the stopwatch and leave the time blank."
+        "or run the stopwatch and leave the time blank. Or switch on Log payouts from EVE to log each "
+        "site from your wallet journal; ESI shows a payout up to an hour after the site."
     )
     unit = "site"
     pocket_label = "Payout (M)"
+    JOURNAL_POLL_MS = 60000  # ESI caches the journal for an hour; the client asks again only once it expires
+    JOURNAL_RETRY_MS = 300000  # after a failed read
+
+    def __init__(self, master, app):
+        super().__init__(master, app)
+        self.auto_log = EsiPoller(
+            self, "Log payouts from EVE", lambda client: get_incursion_payouts(client, client.character.id),
+            self.take_payouts, "Journal", self.JOURNAL_POLL_MS, self.JOURNAL_RETRY_MS,
+        ).switch
+
+    def end_note(self):
+        if not self.auto_log.get():
+            return ""
+        return "\n\nPayouts ESI hasn't shown yet (up to an hour after a site) won't be logged."
+
+    def take_payouts(self, payouts):
+        """Log a site for each payout not seen before and say so."""
+        if not self.auto_log.get() or self.session_id is None:
+            return
+        sites = self.tracker.log_incursion_payouts(self.session_id, payouts)
+        if not sites:
+            return
+        self.app.refresh()
+        count = f"{len(sites)} site" + ("s" if len(sites) > 1 else "")
+        total = sum(site.profit for site in sites)
+        self.notify(f"Logged {count} from EVE: {signed_isk(total)} ISK", profit_color(total))
 
     def build_start_form(self, frame):
         self.per_site = self.field(frame, 0, "Payout per site (million ISK)", 240, "e.g. 31")
@@ -1012,6 +1067,8 @@ class IncursionPage(SessionPage):
         return "Incursion lifetime", self.tracker.totals(INCURSION)
 
     def start_args(self):
+        if self.auto_log.get() and not self.per_site.get().strip():
+            return {}  # sites take their payout from the journal
         payout = parse_isk(self.per_site.get(), "payout per site")
         self.tracker.set_setting("incursion_payout", f"{payout:g}")
         self.payout.delete(0, "end")
@@ -1024,6 +1081,8 @@ class IncursionPage(SessionPage):
             self.payout.insert(0, self.tracker.get_setting("incursion_payout", ""))
 
     def log_run(self):
+        if self.auto_log.get():  # the payout would log the same site again
+            raise ValueError("Sites are logged from EVE; switch off Log payouts from EVE to log by hand.")
         payout = parse_isk(self.payout.get(), "payout")
         minutes = self.timer_or(self.minutes, "site time")
         return self.tracker.log_incursion_site(self.session_id, payout, minutes)

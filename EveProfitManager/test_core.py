@@ -1,10 +1,11 @@
 import sqlite3
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from core import ABYSS, INCURSION, Totals, Tracker, best_weather, isk_per_hour, parse_sessions_txt
+from journal import Payout
 
 OLD_FILE = """Abyss Details!
 
@@ -217,6 +218,44 @@ class TrackerTest(unittest.TestCase):
         self.tracker.set_setting("x", 31)
         self.tracker.set_setting("x", 32)
         self.assertEqual(self.tracker.get_setting("x"), "32")
+
+
+class IncursionPayoutTest(unittest.TestCase):
+    """Payouts read from the wallet journal become incursion sites."""
+
+    def setUp(self):
+        self.tracker = Tracker(":memory:")
+        self.sid = self.tracker.start_session(INCURSION)
+        self.start = self.tracker.session(self.sid).started_at
+
+    def payout(self, journal_id, minutes_in, millions=31.5):
+        return Payout(journal_id=journal_id, paid_at=self.start + timedelta(minutes=minutes_in), millions=millions)
+
+    def test_each_payout_is_a_site_timed_from_the_one_before(self):
+        logged = self.tracker.log_incursion_payouts(self.sid, [self.payout(1, 9), self.payout(2, 21, millions=28.75)])
+        self.assertEqual([(r.profit, r.minutes, r.recorded_at) for r in logged], [
+            (31.5, 9, self.start + timedelta(minutes=9)),
+            (28.75, 12, self.start + timedelta(minutes=21)),
+        ])
+        self.assertEqual(self.tracker.runs(self.sid), logged)
+
+    def test_a_payout_is_logged_once_and_a_deleted_site_stays_deleted(self):
+        first = self.tracker.log_incursion_payouts(self.sid, [self.payout(1, 9)])
+        self.tracker.delete_run(first[0].id)
+        again = self.tracker.log_incursion_payouts(self.sid, [self.payout(1, 9), self.payout(2, 20)])
+        self.assertEqual([(r.minutes, r.profit) for r in again], [(20, 31.5)])  # 1 is gone, so 2 times from the start
+        self.assertEqual(self.tracker.log_incursion_payouts(self.sid, [self.payout(1, 9), self.payout(2, 20)]), [])
+        self.assertEqual(self.tracker.session(self.sid).runs, 1)
+
+    def test_payouts_from_before_the_session_are_not_its_sites(self):
+        self.assertEqual(self.tracker.log_incursion_payouts(self.sid, [self.payout(1, -3)]), [])
+        self.assertEqual(self.tracker.session(self.sid).runs, 0)
+
+    def test_a_site_logged_by_hand_starts_the_next_payouts_time(self):
+        self.tracker.log_incursion_site(self.sid, 31, 10)  # recorded now, just after the session started
+        manual = self.tracker.runs(self.sid)[0].recorded_at
+        logged = self.tracker.log_incursion_payouts(self.sid, [self.payout(1, 30)])
+        self.assertAlmostEqual(logged[0].minutes, (self.start + timedelta(minutes=30) - manual).total_seconds() / 60)
 
 
 class ImportTest(unittest.TestCase):
