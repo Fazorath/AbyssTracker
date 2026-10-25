@@ -27,6 +27,7 @@ from core import (
     tier_label,
 )
 from clock import read_clock
+from location import AbyssWatcher, get_location
 from wallet import get_wallet
 from account import SIGN_IN_ERRORS, Account
 from theme import NEUTRAL_THEME, asset_path, load_fonts, theme_for, ui_family
@@ -768,6 +769,20 @@ class AbyssPage(SessionPage):
     )
     unit = "run"
     pocket_label = "Wallet after run (M)"
+    LOCATION_POLL_MS = 5000  # ESI caches the location for 5 s; the client never asks sooner
+    LOCATION_RETRY_MS = 30000  # after a failed read
+
+    def __init__(self, master, app):
+        super().__init__(master, app)
+        self._watcher = AbyssWatcher()
+        self._watched_session = None
+        self._poll_job = None
+        self._reading = False
+        self.detect = self.paint(
+            ctk.CTkSwitch(self.toolbar, text="Detect runs from EVE", font=font(13), command=self.toggle_detect),
+            text_color="soft", progress_color="accent",
+        )
+        self.detect.pack(side="left", padx=(0, 12), before=self.toolbar.winfo_children()[0])
 
     def build_start_form(self, frame):
         self.start_isk = self.field(frame, 0, "Wallet now (million ISK)", 220, "e.g. 1,250 or 1.25b")
@@ -825,6 +840,78 @@ class AbyssPage(SessionPage):
             show(f"From EVE at {stamp}. ESI refreshes about every 2 min; edit to override.")
 
         self.app.run_async(lambda: get_wallet(client, client.character.id), done)
+
+    def toggle_detect(self):
+        """Start or stop watching the character's location for abyss entries and exits."""
+        if self._poll_job:
+            self.after_cancel(self._poll_job)
+            self._poll_job = None
+        if not self.detect.get():
+            return
+        client, problem = self.signed_in_client()
+        if client is None:
+            self.detect.deselect()
+            self.flash(problem, CRITICAL_TEXT)
+            return
+        self._watcher = AbyssWatcher()
+        self.poll_location()
+
+    def signed_in_client(self):
+        """The active character's ESI client and None, or None and why there isn't one."""
+        try:
+            client = self.app.account.client()
+        except SIGN_IN_ERRORS as e:
+            return None, str(e)
+        return (client, None) if client else (None, "Sign in under Settings first.")
+
+    def poll_location(self):
+        """Read the location off the UI thread, then schedule the next read."""
+        self._poll_job = None
+        if not self.detect.get():
+            return
+        if self.session_id is not None and not self._reading:
+            client, _ = self.signed_in_client()
+            if client is not None:
+                self._reading = True
+
+                def done(location, error):
+                    self._reading = False
+                    if not self.detect.get():  # switched off while the read was out
+                        return
+                    if error is not None:
+                        self.flash(f"Location: {error}", CRITICAL_TEXT)
+                        if self._poll_job:  # back off rather than repeat the error every few seconds
+                            self.after_cancel(self._poll_job)
+                            self._poll_job = self.after(self.LOCATION_RETRY_MS, self.poll_location)
+                    else:
+                        self.see_abyss(location.in_abyss)
+
+                self.app.run_async(lambda: get_location(client, client.character.id), done)
+        self._poll_job = self.after(self.LOCATION_POLL_MS, self.poll_location)
+
+    def see_abyss(self, in_abyss):
+        """Act on a location reading: start the timer on entering, pause it and prompt to log on leaving."""
+        if not self.detect.get() or self.session_id is None:
+            return
+        if self._watched_session != self.session_id:  # a new session starts from a fresh baseline
+            self._watched_session = self.session_id
+            self._watcher = AbyssWatcher()
+        event = self._watcher.see(in_abyss)
+        if event == "entered":
+            self.timer.reset()
+            self.timer.toggle()
+            self.notify("Entered the abyss: timer started.")
+        elif event == "left" and self.timer.value_minutes() is not None:
+            if self.timer.running:
+                self.timer.toggle()
+            left = self.timer.face().text
+            self.notify(f"Left the abyss with {left} left. Enter your wallet and log the run.", self.theme.accent)
+            self.after_isk.focus_set()
+
+    def notify(self, text, color=None):
+        self.flash(text, color)
+        if self.app.pocket:
+            self.app.pocket.say(text, color)
 
     def build_timer(self, master):
         return TimerPanel(master, countdown_minutes=MAXTIME)

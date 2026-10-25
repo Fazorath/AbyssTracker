@@ -40,6 +40,9 @@ This program is designed to help users track their profits and time spent during
     payout) field and Log button, the session's profit, ISK/hour and runs, and the last three runs. It shares the
     timer and session with the full window; **Unpin** lets other windows cover it and **Expand** brings the full
     window back.
+  - **Run detection:** when signed in, switch on **Detect runs from EVE** in the session toolbar. The app polls your
+    character's location (ESI caches it for 5 seconds), starts the timer when you enter Abyssal Deadspace, and on
+    exit pauses it and prompts you to enter your wallet and log the run.
   - Every run is saved immediately, so closing the app mid-session picks up where you left off.
   - Amounts are in millions of ISK; you can type `1,250`, `1.25b` or `800k`. Times accept `14.5` or `14:30`.
 
