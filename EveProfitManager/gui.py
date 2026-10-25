@@ -27,6 +27,8 @@ from core import (
     tier_label,
 )
 from clock import read_clock
+from esi import EsiClient
+from incursions import get_incursions
 from wallet import get_wallet
 from account import SIGN_IN_ERRORS, Account
 from theme import NEUTRAL_THEME, asset_path, load_fonts, theme_for, ui_family
@@ -894,6 +896,56 @@ class IncursionPage(SessionPage):
     )
     unit = "site"
     pocket_label = "Payout (M)"
+    INCURSIONS_POLL_MS = 300000  # ESI caches the incursions for five minutes
+    STATE_COLOR = {"established": CRITICAL_TEXT, "mobilizing": WARNING, "withdrawing": GOOD_TEXT}
+
+    def __init__(self, master, app):
+        super().__init__(master, app)
+        self.public_client = EsiClient(None, None)  # incursions are public: no sign-in
+        self._incursions_job = None
+        self.build_incursions_panel(self.start_form.master)
+
+    def build_incursions_panel(self, parent):
+        """Live incursions, read from ESI's public endpoint, below the start form."""
+        head = ctk.CTkFrame(parent, fg_color="transparent")
+        head.pack(anchor="w", fill="x", pady=(28, 6))
+        ctk.CTkLabel(head, text="Live incursions", font=font(15, "bold"), text_color=INK).pack(side="left")
+        self.paint(
+            ctk.CTkButton(head, text="Refresh", width=80, height=26, fg_color="transparent", border_width=1,
+                          text_color=INK, command=self.read_incursions),
+            border_color="line", hover_color="panel",
+        ).pack(side="left", padx=12)
+        self.incursions_box = ctk.CTkFrame(parent, fg_color="transparent")
+        self.incursions_box.pack(anchor="w")
+        self.incursions_note = self.paint(ctk.CTkLabel(parent, text="Loading…", font=font(12)), text_color="soft")
+        self.incursions_note.pack(anchor="w", pady=(4, 0))
+        self.read_incursions()
+
+    def read_incursions(self):
+        """Read the incursions off the UI thread, then check again in five minutes."""
+        if self._incursions_job:
+            self.after_cancel(self._incursions_job)
+        self._incursions_job = self.after(self.INCURSIONS_POLL_MS, self.read_incursions)
+        self.app.run_async(lambda: get_incursions(self.public_client), self.show_incursions)
+
+    def show_incursions(self, incursions, error):
+        if error is not None:
+            self.incursions_note.configure(text=f"Couldn't read incursions: {error}")
+            return
+        for row in self.incursions_box.winfo_children():
+            row.destroy()
+        for i, inc in enumerate(incursions):
+            boss = "  ·  boss" if inc.has_boss else ""
+            ctk.CTkLabel(self.incursions_box, text=inc.state.capitalize(), font=font(13, "bold"),
+                         text_color=self.STATE_COLOR[inc.state]).grid(row=i, column=0, sticky="w", padx=(0, 16))
+            ctk.CTkLabel(self.incursions_box, text=f"{inc.constellation}  ·  staging {inc.staging}",
+                         font=font(13), text_color=INK).grid(row=i, column=1, sticky="w", padx=(0, 16))
+            ctk.CTkLabel(self.incursions_box, font=font(13), text_color=INK_2,
+                         text=f"{inc.systems} systems  ·  {inc.influence:.0%} influence{boss}",
+                         ).grid(row=i, column=2, sticky="w")
+        self.incursions_note.configure(
+            text="" if incursions else "No incursions are active right now."
+        )
 
     def build_start_form(self, frame):
         self.per_site = self.field(frame, 0, "Payout per site (million ISK)", 240, "e.g. 31")
