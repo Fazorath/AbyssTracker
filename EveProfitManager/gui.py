@@ -762,8 +762,6 @@ class SessionPage(Painter, ctk.CTkFrame):
 
 
 class AbyssPage(SessionPage):
-    LOCATION_POLL_MS = 5000  # ESI caches the location for 5 s; the client never asks sooner
-    LOCATION_RETRY_MS = 30000  # after a failed read
     kind = ABYSS
     subtitle = (
         "Enter your wallet and pick the filament before the first run. After each run, enter the new "
@@ -771,6 +769,8 @@ class AbyssPage(SessionPage):
     )
     unit = "run"
     pocket_label = "Wallet after run (M)"
+    LOCATION_POLL_MS = 5000  # ESI caches the location for 5 s; the client never asks sooner
+    LOCATION_RETRY_MS = 30000  # after a failed read
 
     def __init__(self, master, app):
         super().__init__(master, app)
@@ -848,12 +848,7 @@ class AbyssPage(SessionPage):
             self._poll_job = None
         if not self.detect.get():
             return
-        try:
-            client = self.app.account.client()
-        except SIGN_IN_ERRORS as e:
-            client, problem = None, str(e)
-        else:
-            problem = "Sign in under Settings first."
+        client, problem = self.signed_in_client()
         if client is None:
             self.detect.deselect()
             self.flash(problem, CRITICAL_TEXT)
@@ -861,21 +856,28 @@ class AbyssPage(SessionPage):
         self._watcher = AbyssWatcher()
         self.poll_location()
 
+    def signed_in_client(self):
+        """The active character's ESI client and None, or None and why there isn't one."""
+        try:
+            client = self.app.account.client()
+        except SIGN_IN_ERRORS as e:
+            return None, str(e)
+        return (client, None) if client else (None, "Sign in under Settings first.")
+
     def poll_location(self):
         """Read the location off the UI thread, then schedule the next read."""
         self._poll_job = None
         if not self.detect.get():
             return
         if self.session_id is not None and not self._reading:
-            try:
-                client = self.app.account.client()
-            except SIGN_IN_ERRORS:
-                client = None
+            client, _ = self.signed_in_client()
             if client is not None:
                 self._reading = True
 
                 def done(location, error):
                     self._reading = False
+                    if not self.detect.get():  # switched off while the read was out
+                        return
                     if error is not None:
                         self.flash(f"Location: {error}", CRITICAL_TEXT)
                         if self._poll_job:  # back off rather than repeat the error every few seconds

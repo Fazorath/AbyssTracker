@@ -1,4 +1,5 @@
 """Shared ESI client: compatibility date, User-Agent, ETag/Expires caching, rate limits."""
+import threading
 import time
 from email.utils import parsedate_to_datetime
 
@@ -25,12 +26,17 @@ class EsiClient:
         self._cache = {}  # path -> (etag, expires_at, body)
         self._fetched = {}  # path -> when ESI last answered for it
         self._blocked_until = 0.0
+        self._token_lock = threading.Lock()  # the wallet and location reads run on separate threads
         self._session = requests.Session()
         self._session.headers.update(
             {"User-Agent": USER_AGENT, "X-Compatibility-Date": COMPATIBILITY_DATE}
         )
 
     def _token(self):
+        with self._token_lock:
+            return self._fresh_token()
+
+    def _fresh_token(self):
         if self._access_token and time.time() < self._access_expires - REFRESH_MARGIN:
             return self._access_token
         stored = self.store.refresh_token(self.character.id)
