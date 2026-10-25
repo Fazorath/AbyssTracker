@@ -35,11 +35,27 @@ This program is designed to help users track their profits and time spent during
     with the session's profit, ISK/hour, time and wallet below.
   - **History page:** net profit, ISK/hour and winning sessions, a profit-per-session chart with hover details,
     ISK/hour for each weather (and the best one), and every past session with its weather and tier,
-    filterable by Abyss/Incursion. Old `Sessions.txt` files can be imported.
+    filterable by Abyss/Incursion. Old `Sessions.txt` files can be imported, the current filter can be exported to CSV, and `tracker.db` can be backed up and restored with a click.
   - **Pocket mode:** a small always-on-top window to keep beside the EVE client, with the timer, the wallet (or
     payout) field and Log button, the session's profit, ISK/hour and runs, and the last three runs. It shares the
     timer and session with the full window; **Unpin** lets other windows cover it and **Expand** brings the full
     window back.
+  - **Run detection:** when signed in, switch on **Detect runs from EVE** in the session toolbar. The app polls your
+    character's location (ESI caches it for 5 seconds), starts the timer when you enter Abyssal Deadspace, and on
+    exit pauses it and prompts you to enter your wallet and log the run.
+  - **Incursion payouts:** when signed in, switch on **Log payouts from EVE** on the Incursion page. Each incursion
+    payout in your wallet journal (a *Corporate Reward Payout*) is logged as a site with the amount actually paid,
+    timed from the previous site, or from the session start for the first. ESI caches the journal for an hour, so
+    sites can appear up to an hour after you run them; keep the session open until they do. A payout is only
+    logged once, so a site you delete stays deleted.
+  - **Unsold loot:** when signed in, the Abyss page notes what your character owns when the session starts and
+    shows **Loot (unsold)** beside the wallet profit: the market value of the items gained since, less what was
+    used up (filaments, ammo, a lost ship). Prices are CCP's average market prices, so the figure is an estimate,
+    not a Jita quote. Abyssal modules have no market price and are counted as *unpriced*; blueprint copies are
+    left out. ESI refreshes assets only hourly, so the loot catches up with your runs up to an hour later; keep the
+    session open until it does. For the same reason, sign in before starting the session, and give ESI time to
+    catch up after the last one, or its loot is counted in the new session. Loot listed on the market leaves your
+    assets, so it drops out of the figure until it sells and shows in the wallet.
   - Every run is saved immediately, so closing the app mid-session picks up where you left off.
   - Amounts are in millions of ISK; you can type `1,250`, `1.25b` or `800k`. Times accept `14.5` or `14:30`.
 

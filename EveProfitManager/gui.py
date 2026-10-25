@@ -4,10 +4,12 @@ Desktop UI for the Abyss and Incursion tracker.
 Run with:  python gui.py
 """
 import math
+import sqlite3
 import sys
 import threading
 import time
 import tkinter as tk
+from datetime import datetime
 from tkinter import filedialog, messagebox
 from tkinter import font as tkfont
 
@@ -27,8 +29,9 @@ from core import (
     tier_label,
 )
 from clock import read_clock
-from esi import EsiClient
-from incursions import get_incursions
+from journal import get_incursion_payouts
+from location import AbyssWatcher, get_location
+from loot import get_assets, get_prices, value_change
 from wallet import get_wallet
 from account import SIGN_IN_ERRORS, Account
 from theme import NEUTRAL_THEME, asset_path, load_fonts, theme_for, ui_family
@@ -205,9 +208,9 @@ class TimerPanel(tk.Canvas):
 
     def value_minutes(self):
         """Minutes left (countdown) or elapsed (stopwatch); None if the timer was never started."""
-        elapsed = self.elapsed()
-        if elapsed <= 0:
+        if not self.running and self.elapsed_before <= 0:  # not by elapsed(): a coarse clock reads 0 just after Start
             return None
+        elapsed = self.elapsed()
         if self.countdown:
             return round(max(0.0, self.countdown - elapsed) / 60, 2)
         return round(elapsed / 60, 2)
@@ -456,6 +459,69 @@ def style_tab(button, label, on, live, theme):
     )
 
 
+class EsiPoller:
+    """
+    A toolbar switch that, while on and a session is live, reads ESI off the UI
+    thread every `poll_ms` and hands each result to `on_result`.
+    """
+
+    def __init__(self, page, text, read, on_result, label, poll_ms, retry_ms, on_start=None):
+        self.page = page
+        self.read = read  # client -> result, run off the UI thread
+        self.on_result = on_result
+        self.label = label  # names the read in error messages
+        self.poll_ms, self.retry_ms = poll_ms, retry_ms
+        self.on_start = on_start
+        self._job = None
+        self._reading = False
+        self.switch = page.paint(
+            ctk.CTkSwitch(page.toolbar, text=text, font=font(13), command=self.toggle),
+            text_color="soft", progress_color="accent",
+        )
+        self.switch.pack(side="left", padx=(0, 12), before=page.toolbar.winfo_children()[0])
+
+    def toggle(self):
+        """Start or stop polling as the switch says."""
+        if self._job:
+            self.page.after_cancel(self._job)
+            self._job = None
+        if not self.switch.get():
+            return
+        client, problem = self.page.signed_in_client()
+        if client is None:
+            self.switch.deselect()
+            self.page.flash(problem, CRITICAL_TEXT)
+            return
+        if self.on_start:
+            self.on_start()
+        self.poll()
+
+    def poll(self):
+        """Read off the UI thread, then schedule the next read."""
+        self._job = None
+        if not self.switch.get():
+            return
+        if self.page.session_id is not None and not self._reading:
+            client, _ = self.page.signed_in_client()
+            if client is not None:
+                self._reading = True
+
+                def done(result, error):
+                    self._reading = False
+                    if not self.switch.get():  # switched off while the read was out
+                        return
+                    if error is not None:
+                        self.page.flash(f"{self.label}: {error}", CRITICAL_TEXT)
+                        if self._job:  # back off rather than repeat the error every poll
+                            self.page.after_cancel(self._job)
+                            self._job = self.page.after(self.retry_ms, self.poll)
+                    else:
+                        self.on_result(result)
+
+                self.page.app.run_async(lambda: self.read(client), done)
+        self._job = self.page.after(self.poll_ms, self.poll)
+
+
 class SessionPage(Painter, ctk.CTkFrame):
     """
     Shared layout for the Abyss and Incursion pages: a start screen and a live session
@@ -559,6 +625,7 @@ class SessionPage(Painter, ctk.CTkFrame):
     def stat_labels(self): return []
     def start_args(self): return {}
     def log_run(self): ...
+    def end_note(self): return ""
     def update_stats(self, session, runs): ...
     def timer_caption(self, session): return ""
     def lifetime_totals(self, session): return "", None
@@ -627,7 +694,8 @@ class SessionPage(Painter, ctk.CTkFrame):
         if session.runs and not messagebox.askyesno(
             "End session",
             f"End this {KIND_NAME[self.kind].lower()} session?\n\n"
-            f"{session.runs} {self.unit}s · {signed_isk(session.profit)} ISK · {format_minutes(session.minutes)}",
+            f"{session.runs} {self.unit}s · {signed_isk(session.profit)} ISK · {format_minutes(session.minutes)}"
+            f"{self.end_note()}",
             parent=self,
         ):
             return
@@ -711,6 +779,19 @@ class SessionPage(Painter, ctk.CTkFrame):
             self.tracker.delete_run(run_id)
             self.app.refresh()
 
+    def signed_in_client(self):
+        """The active character's ESI client and None, or None and why there isn't one."""
+        try:
+            client = self.app.account.client()
+        except SIGN_IN_ERRORS as e:
+            return None, str(e)
+        return (client, None) if client else (None, "Sign in under Settings first.")
+
+    def notify(self, text, color=None):
+        self.flash(text, color)
+        if self.app.pocket:
+            self.app.pocket.say(text, color)
+
     def flash(self, text, color=None):
         self.message.configure(text=text, text_color=color or self.theme.soft)
         if self._message_job:
@@ -770,6 +851,89 @@ class AbyssPage(SessionPage):
     )
     unit = "run"
     pocket_label = "Wallet after run (M)"
+    LOCATION_POLL_MS = 5000  # ESI caches the location for 5 s; the client never asks sooner
+    LOCATION_RETRY_MS = 30000  # after a failed read
+    LOOT_POLL_MS = 5 * 60 * 1000  # ESI caches assets for an hour; the client never asks sooner
+
+    def __init__(self, master, app):
+        super().__init__(master, app)
+        self._watcher = AbyssWatcher()
+        self._watched_session = None
+        self.detect = EsiPoller(
+            self, "Detect runs from EVE", lambda client: get_location(client, client.character.id),
+            lambda location: self.see_abyss(location.in_abyss), "Location",
+            self.LOCATION_POLL_MS, self.LOCATION_RETRY_MS, on_start=self.reset_watcher,
+        ).switch
+        self._valuing = False
+        self._loot_problem = None  # an asset error or mismatch, shown instead of the loot's time
+        self._loot_waiting = "reading assets..."  # shown before the session's first reading
+        self._loot_poll()
+
+    def _loot_poll(self):
+        self.value_loot()
+        self.after(self.LOOT_POLL_MS, self._loot_poll)
+
+    def value_loot(self):
+        """
+        Read the assets off the UI thread: the first reading of a session is its
+        baseline, and later ones value what changed since. Quiet when signed out.
+        """
+        if self.session_id is None or self._valuing:
+            return
+        client, _ = self.signed_in_client()
+        if client is None:
+            if self._loot_waiting != "sign in to value loot":
+                self._loot_waiting = "sign in to value loot"
+                self.refresh()
+            return
+        self._loot_waiting = "reading assets..."
+        session_id = self.session_id
+        has_baseline = self.tracker.loot_baseline(session_id) is not None
+        self._valuing = True
+
+        def read():
+            return get_assets(client, client.character.id), get_prices(client) if has_baseline else None
+
+        def done(result, error):
+            self._valuing = False
+            if session_id != self.session_id:  # the session changed while the read was out
+                self.value_loot()
+            elif error is not None:
+                self.loot_failed(error)
+            else:
+                self.take_assets(*result)
+
+        self.app.run_async(read, done)
+
+    def take_assets(self, assets, prices):
+        """Use an asset reading: the session's baseline if it has none, else value the change since."""
+        baseline = self.tracker.loot_baseline(self.session_id)
+        self._loot_problem = None
+        if baseline is None:
+            self.tracker.set_loot_baseline(self.session_id, assets.character_id, assets.quantities)
+        elif baseline.character_id != assets.character_id:
+            self._loot_problem = "baseline is for another character"
+        elif prices is not None:
+            self.tracker.set_loot(self.session_id, value_change(baseline.quantities, assets.quantities, prices),
+                                  datetime.fromtimestamp(assets.fetched_at))
+        self.refresh()
+
+    def loot_failed(self, error):
+        self._loot_problem = f"Assets: {error}"
+        self.refresh()
+
+    def start_session(self):
+        self._loot_problem = None
+        super().start_session()
+        self.value_loot()
+
+    def end_note(self):
+        loot = self.tracker.loot(self.session_id)
+        return f"\n\nUnsold loot: {signed_isk(loot.millions)} ISK at market prices." if loot else ""
+
+    def resume(self):
+        super().resume()
+        self.value_loot()
 
     def build_start_form(self, frame):
         self.start_isk = self.field(frame, 0, "Wallet now (million ISK)", 220, "e.g. 1,250 or 1.25b")
@@ -828,6 +992,29 @@ class AbyssPage(SessionPage):
 
         self.app.run_async(lambda: get_wallet(client, client.character.id), done)
 
+    def reset_watcher(self):
+        """Detection switched on: the next reading is a fresh baseline."""
+        self._watcher = AbyssWatcher()
+
+    def see_abyss(self, in_abyss):
+        """Act on a location reading: start the timer on entering, pause it and prompt to log on leaving."""
+        if not self.detect.get() or self.session_id is None:
+            return
+        if self._watched_session != self.session_id:  # a new session starts from a fresh baseline
+            self._watched_session = self.session_id
+            self._watcher = AbyssWatcher()
+        event = self._watcher.see(in_abyss)
+        if event == "entered":
+            self.timer.reset()
+            self.timer.toggle()
+            self.notify("Entered the abyss: timer started.")
+        elif event == "left" and self.timer.value_minutes() is not None:
+            if self.timer.running:
+                self.timer.toggle()
+            left = self.timer.face().text
+            self.notify(f"Left the abyss with {left} left. Enter your wallet and log the run.", self.theme.accent)
+            self.after_isk.focus_set()
+
     def build_timer(self, master):
         return TimerPanel(master, countdown_minutes=MAXTIME)
 
@@ -841,7 +1028,8 @@ class AbyssPage(SessionPage):
         return self.after_isk, self.time_left
 
     def stat_labels(self):
-        return [("profit", "Session"), ("rate", "ISK/hr"), ("time", "Time"), ("wallet", "Wallet")]
+        return [("profit", "Session"), ("loot", "Loot (unsold)"), ("rate", "ISK/hr"), ("time", "Time"),
+                ("wallet", "Wallet")]
 
     def timer_caption(self, session):
         weather = (session.weather or "Abyssal").upper()
@@ -868,6 +1056,7 @@ class AbyssPage(SessionPage):
     def after_log(self):
         self.after_isk.delete(0, "end")
         self.time_left.delete(0, "end")
+        self.value_loot()
 
     def edit_fields(self, run):
         return [("Wallet after run (M)", f"{run.isk_after:g}"), ("Time left (min)", f"{MAXTIME - run.minutes:g}")]
@@ -886,66 +1075,52 @@ class AbyssPage(SessionPage):
                                sub=f"{session.runs} runs" if runs else "")
         self.stats["wallet"].set(format_isk(self.tracker.current_isk(session.id) or 0),
                                  sub=f"from {format_isk(session.starting_isk or 0)}")
+        loot = self.tracker.loot(session.id)
+        if loot:
+            unpriced = f" · {loot.unpriced} unpriced" if loot.unpriced else ""
+            self.stats["loot"].set(signed_isk(loot.millions), profit_color(loot.millions),
+                                   self._loot_problem or f"from EVE at {loot.as_of:%H:%M}{unpriced}")
+        elif self.tracker.loot_baseline(session.id) is not None:
+            self.stats["loot"].set(signed_isk(0), sub=self._loot_problem or "ESI updates assets hourly")
+        else:
+            self.stats["loot"].set("—", sub=self._loot_problem or self._loot_waiting)
 
 
 class IncursionPage(SessionPage):
     kind = INCURSION
     subtitle = (
         "Set the payout per site; it's remembered for next time. Log each site with its time, "
-        "or run the stopwatch and leave the time blank."
+        "or run the stopwatch and leave the time blank. Or switch on Log payouts from EVE to log each "
+        "site from your wallet journal; ESI shows a payout up to an hour after the site."
     )
     unit = "site"
     pocket_label = "Payout (M)"
-    INCURSIONS_POLL_MS = 300000  # ESI caches the incursions for five minutes
-    STATE_COLOR = {"established": CRITICAL_TEXT, "mobilizing": WARNING, "withdrawing": GOOD_TEXT}
+    JOURNAL_POLL_MS = 60000  # ESI caches the journal for an hour; the client asks again only once it expires
+    JOURNAL_RETRY_MS = 300000  # after a failed read
 
     def __init__(self, master, app):
         super().__init__(master, app)
-        self.public_client = EsiClient(None, None)  # incursions are public: no sign-in
-        self._incursions_job = None
-        self.build_incursions_panel(self.start_form.master)
+        self.auto_log = EsiPoller(
+            self, "Log payouts from EVE", lambda client: get_incursion_payouts(client, client.character.id),
+            self.take_payouts, "Journal", self.JOURNAL_POLL_MS, self.JOURNAL_RETRY_MS,
+        ).switch
 
-    def build_incursions_panel(self, parent):
-        """Live incursions, read from ESI's public endpoint, below the start form."""
-        head = ctk.CTkFrame(parent, fg_color="transparent")
-        head.pack(anchor="w", fill="x", pady=(28, 6))
-        ctk.CTkLabel(head, text="Live incursions", font=font(15, "bold"), text_color=INK).pack(side="left")
-        self.paint(
-            ctk.CTkButton(head, text="Refresh", width=80, height=26, fg_color="transparent", border_width=1,
-                          text_color=INK, command=self.read_incursions),
-            border_color="line", hover_color="panel",
-        ).pack(side="left", padx=12)
-        self.incursions_box = ctk.CTkFrame(parent, fg_color="transparent")
-        self.incursions_box.pack(anchor="w")
-        self.incursions_note = self.paint(ctk.CTkLabel(parent, text="Loading…", font=font(12)), text_color="soft")
-        self.incursions_note.pack(anchor="w", pady=(4, 0))
-        self.read_incursions()
+    def end_note(self):
+        if not self.auto_log.get():
+            return ""
+        return "\n\nPayouts ESI hasn't shown yet (up to an hour after a site) won't be logged."
 
-    def read_incursions(self):
-        """Read the incursions off the UI thread, then check again in five minutes."""
-        if self._incursions_job:
-            self.after_cancel(self._incursions_job)
-        self._incursions_job = self.after(self.INCURSIONS_POLL_MS, self.read_incursions)
-        self.app.run_async(lambda: get_incursions(self.public_client), self.show_incursions)
-
-    def show_incursions(self, incursions, error):
-        if error is not None:
-            self.incursions_note.configure(text=f"Couldn't read incursions: {error}")
+    def take_payouts(self, payouts):
+        """Log a site for each payout not seen before and say so."""
+        if not self.auto_log.get() or self.session_id is None:
             return
-        for row in self.incursions_box.winfo_children():
-            row.destroy()
-        for i, inc in enumerate(incursions):
-            boss = "  ·  boss" if inc.has_boss else ""
-            ctk.CTkLabel(self.incursions_box, text=inc.state.capitalize(), font=font(13, "bold"),
-                         text_color=self.STATE_COLOR[inc.state]).grid(row=i, column=0, sticky="w", padx=(0, 16))
-            ctk.CTkLabel(self.incursions_box, text=f"{inc.constellation}  ·  staging {inc.staging}",
-                         font=font(13), text_color=INK).grid(row=i, column=1, sticky="w", padx=(0, 16))
-            ctk.CTkLabel(self.incursions_box, font=font(13), text_color=INK_2,
-                         text=f"{inc.systems} systems  ·  {inc.influence:.0%} influence{boss}",
-                         ).grid(row=i, column=2, sticky="w")
-        self.incursions_note.configure(
-            text="" if incursions else "No incursions are active right now."
-        )
+        sites = self.tracker.log_incursion_payouts(self.session_id, payouts)
+        if not sites:
+            return
+        self.app.refresh()
+        count = f"{len(sites)} site" + ("s" if len(sites) > 1 else "")
+        total = sum(site.profit for site in sites)
+        self.notify(f"Logged {count} from EVE: {signed_isk(total)} ISK", profit_color(total))
 
     def build_start_form(self, frame):
         self.per_site = self.field(frame, 0, "Payout per site (million ISK)", 240, "e.g. 31")
@@ -977,6 +1152,8 @@ class IncursionPage(SessionPage):
         return "Incursion lifetime", self.tracker.totals(INCURSION)
 
     def start_args(self):
+        if self.auto_log.get() and not self.per_site.get().strip():
+            return {}  # sites take their payout from the journal
         payout = parse_isk(self.per_site.get(), "payout per site")
         self.tracker.set_setting("incursion_payout", f"{payout:g}")
         self.payout.delete(0, "end")
@@ -989,6 +1166,8 @@ class IncursionPage(SessionPage):
             self.payout.insert(0, self.tracker.get_setting("incursion_payout", ""))
 
     def log_run(self):
+        if self.auto_log.get():  # the payout would log the same site again
+            raise ValueError("Sites are logged from EVE; switch off Log payouts from EVE to log by hand.")
         payout = parse_isk(self.payout.get(), "payout")
         minutes = self.timer_or(self.minutes, "site time")
         return self.tracker.log_incursion_site(self.session_id, payout, minutes)
@@ -1271,10 +1450,16 @@ class HistoryPage(ctk.CTkFrame):
         self.toolbar = ctk.CTkFrame(app.header, fg_color="transparent")
         self.span = ctk.CTkLabel(self.toolbar, text="", font=font(13), text_color=t.soft)
         self.span.pack(side="left", padx=(0, 14))
-        ctk.CTkButton(
-            self.toolbar, text="Import Sessions.txt", width=160, height=34, fg_color="transparent", border_width=1,
-            border_color=t.line, hover_color=t.panel, text_color=INK, command=self.import_txt,
-        ).pack(side="left")
+        for text, width, command in (
+            ("Import Sessions.txt", 160, self.import_txt),
+            ("Export CSV", 100, self.export_csv),
+            ("Back up", 80, self.back_up),
+            ("Restore", 80, self.restore),
+        ):
+            ctk.CTkButton(
+                self.toolbar, text=text, width=width, height=34, fg_color="transparent", border_width=1,
+                border_color=t.line, hover_color=t.panel, text_color=INK, command=command,
+            ).pack(side="left", padx=(0, 8))
 
         self.filter = ChipGroup(self, list(self.FILTERS), "All", lambda _v: self.refresh())
         self.filter.set_theme(t)
@@ -1409,6 +1594,57 @@ class HistoryPage(ctk.CTkFrame):
             messagebox.showerror("Import failed", str(err), parent=self)
             return
         messagebox.showinfo("Import", f"Imported {count} session{'s' if count != 1 else ''}.", parent=self)
+        self.app.refresh()
+
+    def export_csv(self):
+        name = self.filter.get()
+        path = filedialog.asksaveasfilename(
+            parent=self, title="Export CSV", defaultextension=".csv", initialfile=f"abyss-tracker-{name.lower()}.csv",
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+        try:
+            count = self.tracker.export_csv(path, self.FILTERS[name])
+        except OSError as err:
+            messagebox.showerror("Export failed", str(err), parent=self)
+            return
+        messagebox.showinfo("Export", f"Exported {count} row{'s' if count != 1 else ''}.", parent=self)
+
+    def back_up(self):
+        path = filedialog.asksaveasfilename(
+            parent=self, title="Back up tracker.db", defaultextension=".db",
+            initialfile=f"tracker-{datetime.now():%Y-%m-%d}.db",
+            filetypes=[("Database files", "*.db"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+        try:
+            self.tracker.backup(path)
+        except (OSError, ValueError, sqlite3.Error) as err:
+            messagebox.showerror("Backup failed", str(err), parent=self)
+            return
+        messagebox.showinfo("Backup", "Backup saved.", parent=self)
+
+    def restore(self):
+        path = filedialog.askopenfilename(
+            parent=self, title="Restore from backup", filetypes=[("Database files", "*.db"), ("All files", "*.*")]
+        )
+        if not path or not messagebox.askyesno(
+            "Restore backup",
+            "Replace all sessions and runs with this backup?\n\nEverything logged since it was made is lost. "
+            "This can't be undone.",
+            parent=self,
+        ):
+            return
+        try:
+            self.tracker.restore(path)
+        except (OSError, ValueError, sqlite3.Error) as err:
+            messagebox.showerror("Restore failed", str(err), parent=self)
+            return
+        for kind in (ABYSS, INCURSION):  # a live session id may now point at nothing, or at a different session
+            self.app.pages[kind].resume()
+        messagebox.showinfo("Restore", "Backup restored.", parent=self)
         self.app.refresh()
 
 

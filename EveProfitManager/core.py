@@ -3,7 +3,9 @@ Shared tracking logic and storage for the CLI and the desktop UI.
 
 All ISK amounts are in millions, all times are in minutes.
 """
+import csv
 import hashlib
+import json
 import math
 import os
 import re
@@ -40,6 +42,17 @@ CREATE TABLE IF NOT EXISTS runs (
     minutes REAL NOT NULL,
     isk_after REAL,
     count INTEGER NOT NULL DEFAULT 1
+);
+CREATE TABLE IF NOT EXISTS payouts (
+    journal_id INTEGER PRIMARY KEY
+);
+CREATE TABLE IF NOT EXISTS loot (
+    session_id INTEGER PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,
+    character_id INTEGER NOT NULL,
+    baseline TEXT NOT NULL,
+    millions REAL,
+    unpriced INTEGER,
+    as_of TEXT
 );
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
@@ -109,6 +122,21 @@ class Run:
 
 
 @dataclass
+class Baseline:
+    """What a character owned when a session started."""
+    character_id: int
+    quantities: dict  # type_id -> quantity
+
+
+@dataclass
+class Loot:
+    """A session's unsold loot: the market value of how its items changed since it started."""
+    millions: float
+    unpriced: int  # kinds of item that changed but have no market price
+    as_of: datetime  # when the assets it was valued from were read
+
+
+@dataclass
 class Session:
     id: int
     kind: str
@@ -170,6 +198,9 @@ class Tracker:
         self.db = sqlite3.connect(path)
         self.db.row_factory = sqlite3.Row
         self.db.execute("PRAGMA foreign_keys = ON")
+        self._migrate()
+
+    def _migrate(self):
         self.db.executescript(SCHEMA)
         columns = [r["name"] for r in self.db.execute("PRAGMA table_info(sessions)")]
         # Columns added after the first release, for databases created before them
@@ -279,14 +310,54 @@ class Tracker:
         _require_minutes(minutes)
         return self._add_run(session_id, profit, minutes, None)
 
+    def log_incursion_payouts(self, session_id, payouts):
+        """
+        Record each incursion payout from the wallet journal as a site.
+
+        A site's time runs from the session start, or the latest site logged
+        before it was paid, to its payout. Payouts already seen are skipped, so a
+        site deleted afterwards stays deleted.
+
+        Args:
+            session_id (int): Session to add the sites to.
+            payouts (list[journal.Payout]): Payouts in any order.
+
+        Returns:
+            list[Run]: The sites recorded, oldest first.
+        """
+        started_at = self.session(session_id).started_at
+        logged = []
+        for payout in sorted(payouts, key=lambda p: (p.paid_at, p.journal_id)):
+            seen = self.db.execute("SELECT 1 FROM payouts WHERE journal_id = ?", (payout.journal_id,)).fetchone()
+            if seen or payout.paid_at < started_at:
+                continue
+            paid_at = payout.paid_at.isoformat(timespec="seconds")
+            row = self.db.execute(
+                "SELECT MAX(recorded_at) AS last FROM runs WHERE session_id = ? AND recorded_at <= ?",
+                (session_id, paid_at),
+            ).fetchone()
+            since = datetime.fromisoformat(row["last"]) if row["last"] else started_at
+            with self.db:  # the site and its payout are saved together, or neither is
+                self.db.execute("INSERT INTO payouts (journal_id) VALUES (?)", (payout.journal_id,))
+                run_id = self._insert_run(
+                    session_id, payout.millions, (payout.paid_at - since).total_seconds() / 60, None, 1, paid_at
+                )
+            logged.append(self.run(run_id))
+        return logged
+
     def _add_run(self, session_id, profit, minutes, isk_after, count=1, recorded_at=None):
         with self.db:
-            cur = self.db.execute(
-                "INSERT INTO runs (session_id, recorded_at, profit, minutes, isk_after, count) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
-                (session_id, recorded_at or _now(), profit, minutes, isk_after, count),
-            )
-        return self.run(cur.lastrowid)
+            run_id = self._insert_run(session_id, profit, minutes, isk_after, count, recorded_at)
+        return self.run(run_id)
+
+    def _insert_run(self, session_id, profit, minutes, isk_after, count, recorded_at):
+        """Insert a run inside the caller's transaction; returns its id."""
+        cur = self.db.execute(
+            "INSERT INTO runs (session_id, recorded_at, profit, minutes, isk_after, count) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (session_id, recorded_at or _now(), profit, minutes, isk_after, count),
+        )
+        return cur.lastrowid
 
     def run(self, run_id):
         row = self.db.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
@@ -378,6 +449,50 @@ class Tracker:
         session = self.session(session_id)
         return session.starting_isk if session else None
 
+    # --- loot -----------------------------------------------------------
+
+    def set_loot_baseline(self, session_id, character_id, quantities):
+        """
+        Remember what the character owned when the session started, by type_id.
+
+        Only the first baseline counts, so reading the assets again after a
+        restart doesn't wipe out loot already brought back.
+        """
+        with self.db:
+            self.db.execute(
+                "INSERT OR IGNORE INTO loot (session_id, character_id, baseline) VALUES (?, ?, ?)",
+                (session_id, character_id, json.dumps(quantities)),
+            )
+
+    def loot_baseline(self, session_id):
+        """The session's Baseline, or None if none was taken."""
+        row = self.db.execute("SELECT character_id, baseline FROM loot WHERE session_id = ?", (session_id,)).fetchone()
+        if row is None:
+            return None
+        return Baseline(row["character_id"], {int(t): q for t, q in json.loads(row["baseline"]).items()})
+
+    def set_loot(self, session_id, value, as_of):
+        """
+        Save the session's latest loot valuation.
+
+        Args:
+            session_id (int): Session with a baseline.
+            value (loot.LootValue): Worth of the change since the baseline.
+            as_of (datetime): When the assets it was valued from were read.
+        """
+        with self.db:
+            self.db.execute(
+                "UPDATE loot SET millions = ?, unpriced = ?, as_of = ? WHERE session_id = ?",
+                (value.millions, value.unpriced, as_of.isoformat(timespec="seconds"), session_id),
+            )
+
+    def loot(self, session_id):
+        """The session's latest Loot, or None if it hasn't been valued."""
+        row = self.db.execute(
+            "SELECT millions, unpriced, as_of FROM loot WHERE session_id = ? AND as_of IS NOT NULL", (session_id,)
+        ).fetchone()
+        return Loot(row["millions"], row["unpriced"], datetime.fromisoformat(row["as_of"])) if row else None
+
     # --- stats ----------------------------------------------------------
 
     def totals(self, kind=None):
@@ -451,6 +566,90 @@ class Tracker:
                 )
                 imported += 1
         return imported
+
+    # --- export and backup ----------------------------------------------
+
+    def export_csv(self, path, kind=None):
+        """
+        Write every run with its session to a CSV file, oldest session first.
+
+        A session with no runs yet gets one row with the run columns empty.
+
+        Args:
+            path (str | Path): File to write, replacing any existing one.
+            kind (str, optional): Only export ABYSS or INCURSION sessions.
+
+        Returns:
+            int: Number of rows written.
+        """
+        where, args = ("WHERE s.kind = ?", (kind,)) if kind else ("", ())
+        rows = self.db.execute(
+            "SELECT s.id AS session_id, s.kind, s.started_at, s.ended_at, s.weather, s.tier, s.imported, "
+            "r.id AS run_id, r.recorded_at, r.profit AS profit_millions, r.minutes, "
+            "r.isk_after AS isk_after_millions, r.count AS runs "
+            f"FROM sessions s LEFT JOIN runs r ON r.session_id = s.id {where} ORDER BY s.started_at, s.id, r.id",
+            args,
+        ).fetchall()
+        with open(path, "w", newline="", encoding="utf-8") as f:
+            out = csv.writer(f)
+            out.writerow(_CSV_COLUMNS)
+            out.writerows(tuple("" if row[c] is None else row[c] for c in _CSV_COLUMNS) for row in rows)
+        return len(rows)
+
+    def backup(self, path):
+        """
+        Save a consistent copy of the whole database, replacing any file at path.
+
+        Args:
+            path (str | Path): Where to put the copy.
+
+        Raises:
+            ValueError: If path is the live database itself.
+        """
+        live = self.db.execute("PRAGMA database_list").fetchone()["file"]
+        if live and os.path.exists(path) and os.path.samefile(live, path):
+            raise ValueError("Choose a different file than the live database")
+        target = sqlite3.connect(path)
+        try:
+            self.db.backup(target)
+        except sqlite3.Error:
+            target.close()
+            Path(path).unlink(missing_ok=True)  # don't leave half a backup that looks like a real one
+            raise
+        finally:
+            target.close()
+
+    def restore(self, path):
+        """
+        Replace all data with the contents of a backup made by backup().
+
+        The file is checked first, so a bad file leaves the current data alone.
+        Backups from older versions are brought up to the current schema.
+
+        Args:
+            path (str | Path): Backup file.
+
+        Raises:
+            ValueError: If path isn't an intact tracker database.
+        """
+        try:
+            source = sqlite3.connect(f"{Path(path).resolve().as_uri()}?mode=ro", uri=True)
+        except sqlite3.Error as err:
+            raise ValueError(f"Can't open {path}: {err}") from err
+        try:
+            try:
+                if source.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+                    raise ValueError("The backup file is damaged")
+                tables = {r[0] for r in source.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+            except sqlite3.DatabaseError:
+                tables = set()
+            if not {"sessions", "runs"} <= tables:
+                raise ValueError("That isn't an AbyssTracker database")
+            source.backup(self.db)
+        finally:
+            source.close()
+        self._migrate()
+        self.db.commit()
 
 
 def parse_sessions_txt(text):
@@ -539,6 +738,11 @@ def _require_filament(kind, weather, tier):
 def _now():
     return datetime.now().isoformat(timespec="seconds")
 
+
+_CSV_COLUMNS = (
+    "session_id", "kind", "started_at", "ended_at", "weather", "tier", "imported",
+    "run_id", "recorded_at", "profit_millions", "minutes", "isk_after_millions", "runs",
+)
 
 _SESSION_QUERY = (
     "SELECT s.*, COALESCE(SUM(r.profit), 0) AS profit, COALESCE(SUM(r.minutes), 0) AS minutes, "
