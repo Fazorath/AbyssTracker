@@ -207,9 +207,9 @@ class TimerPanel(tk.Canvas):
 
     def value_minutes(self):
         """Minutes left (countdown) or elapsed (stopwatch); None if the timer was never started."""
-        elapsed = self.elapsed()
-        if elapsed <= 0:
+        if not self.running and self.elapsed_before <= 0:  # not by elapsed(): a coarse clock reads 0 just after Start
             return None
+        elapsed = self.elapsed()
         if self.countdown:
             return round(max(0.0, self.countdown - elapsed) / 60, 2)
         return round(elapsed / 60, 2)
