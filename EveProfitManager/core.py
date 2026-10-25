@@ -41,6 +41,9 @@ CREATE TABLE IF NOT EXISTS runs (
     isk_after REAL,
     count INTEGER NOT NULL DEFAULT 1
 );
+CREATE TABLE IF NOT EXISTS payouts (
+    journal_id INTEGER PRIMARY KEY
+);
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -278,6 +281,40 @@ class Tracker:
         _require_finite(profit)
         _require_minutes(minutes)
         return self._add_run(session_id, profit, minutes, None)
+
+    def log_incursion_payouts(self, session_id, payouts):
+        """
+        Record each incursion payout from the wallet journal as a site.
+
+        A site's time runs from the session start, or the latest site logged
+        before it was paid, to its payout. Payouts already seen are skipped, so a
+        site deleted afterwards stays deleted.
+
+        Args:
+            session_id (int): Session to add the sites to.
+            payouts (list[journal.Payout]): Payouts in any order.
+
+        Returns:
+            list[Run]: The sites recorded, oldest first.
+        """
+        started_at = self.session(session_id).started_at
+        logged = []
+        for payout in sorted(payouts, key=lambda p: (p.at, p.journal_id)):
+            seen = self.db.execute("SELECT 1 FROM payouts WHERE journal_id = ?", (payout.journal_id,)).fetchone()
+            if seen or payout.at < started_at:
+                continue
+            row = self.db.execute(
+                "SELECT MAX(recorded_at) AS last FROM runs WHERE session_id = ? AND recorded_at <= ?",
+                (session_id, payout.at.isoformat(timespec="seconds")),
+            ).fetchone()
+            since = datetime.fromisoformat(row["last"]) if row["last"] else started_at
+            with self.db:
+                self.db.execute("INSERT INTO payouts (journal_id) VALUES (?)", (payout.journal_id,))
+            logged.append(self._add_run(
+                session_id, payout.millions, (payout.at - since).total_seconds() / 60, None,
+                recorded_at=payout.at.isoformat(timespec="seconds"),
+            ))
+        return logged
 
     def _add_run(self, session_id, profit, minutes, isk_after, count=1, recorded_at=None):
         with self.db:

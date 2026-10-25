@@ -27,6 +27,7 @@ from core import (
     tier_label,
 )
 from clock import read_clock
+from journal import get_incursion_payouts
 from location import AbyssWatcher, get_location
 from wallet import get_wallet
 from account import SIGN_IN_ERRORS, Account
@@ -710,6 +711,19 @@ class SessionPage(Painter, ctk.CTkFrame):
             self.tracker.delete_run(run_id)
             self.app.refresh()
 
+    def signed_in_client(self):
+        """The active character's ESI client and None, or None and why there isn't one."""
+        try:
+            client = self.app.account.client()
+        except SIGN_IN_ERRORS as e:
+            return None, str(e)
+        return (client, None) if client else (None, "Sign in under Settings first.")
+
+    def notify(self, text, color=None):
+        self.flash(text, color)
+        if self.app.pocket:
+            self.app.pocket.say(text, color)
+
     def flash(self, text, color=None):
         self.message.configure(text=text, text_color=color or self.theme.soft)
         if self._message_job:
@@ -856,14 +870,6 @@ class AbyssPage(SessionPage):
         self._watcher = AbyssWatcher()
         self.poll_location()
 
-    def signed_in_client(self):
-        """The active character's ESI client and None, or None and why there isn't one."""
-        try:
-            client = self.app.account.client()
-        except SIGN_IN_ERRORS as e:
-            return None, str(e)
-        return (client, None) if client else (None, "Sign in under Settings first.")
-
     def poll_location(self):
         """Read the location off the UI thread, then schedule the next read."""
         self._poll_job = None
@@ -907,11 +913,6 @@ class AbyssPage(SessionPage):
             left = self.timer.face().text
             self.notify(f"Left the abyss with {left} left. Enter your wallet and log the run.", self.theme.accent)
             self.after_isk.focus_set()
-
-    def notify(self, text, color=None):
-        self.flash(text, color)
-        if self.app.pocket:
-            self.app.pocket.say(text, color)
 
     def build_timer(self, master):
         return TimerPanel(master, countdown_minutes=MAXTIME)
@@ -977,10 +978,74 @@ class IncursionPage(SessionPage):
     kind = INCURSION
     subtitle = (
         "Set the payout per site; it's remembered for next time. Log each site with its time, "
-        "or run the stopwatch and leave the time blank."
+        "or run the stopwatch and leave the time blank. Or switch on Log payouts from EVE to log each "
+        "site from your wallet journal; ESI shows a payout up to an hour after the site."
     )
     unit = "site"
     pocket_label = "Payout (M)"
+    JOURNAL_POLL_MS = 60000  # ESI caches the journal for an hour; the client asks again only once it expires
+    JOURNAL_RETRY_MS = 300000  # after a failed read
+
+    def __init__(self, master, app):
+        super().__init__(master, app)
+        self._journal_job = None
+        self._reading = False
+        self.auto_log = self.paint(
+            ctk.CTkSwitch(self.toolbar, text="Log payouts from EVE", font=font(13), command=self.toggle_auto_log),
+            text_color="soft", progress_color="accent",
+        )
+        self.auto_log.pack(side="left", padx=(0, 12), before=self.toolbar.winfo_children()[0])
+
+    def toggle_auto_log(self):
+        """Start or stop logging a site for each incursion payout in the wallet journal."""
+        if self._journal_job:
+            self.after_cancel(self._journal_job)
+            self._journal_job = None
+        if not self.auto_log.get():
+            return
+        client, problem = self.signed_in_client()
+        if client is None:
+            self.auto_log.deselect()
+            self.flash(problem, CRITICAL_TEXT)
+            return
+        self.poll_journal()
+
+    def poll_journal(self):
+        """Read the journal off the UI thread, then schedule the next read."""
+        self._journal_job = None
+        if not self.auto_log.get():
+            return
+        if self.session_id is not None and not self._reading:
+            client, _ = self.signed_in_client()
+            if client is not None:
+                self._reading = True
+
+                def done(payouts, error):
+                    self._reading = False
+                    if not self.auto_log.get():  # switched off while the read was out
+                        return
+                    if error is not None:
+                        self.flash(f"Journal: {error}", CRITICAL_TEXT)
+                        if self._journal_job:  # back off rather than repeat the error every minute
+                            self.after_cancel(self._journal_job)
+                            self._journal_job = self.after(self.JOURNAL_RETRY_MS, self.poll_journal)
+                    else:
+                        self.take_payouts(payouts)
+
+                self.app.run_async(lambda: get_incursion_payouts(client, client.character.id), done)
+        self._journal_job = self.after(self.JOURNAL_POLL_MS, self.poll_journal)
+
+    def take_payouts(self, payouts):
+        """Log a site for each payout not seen before and say so."""
+        if not self.auto_log.get() or self.session_id is None:
+            return
+        sites = self.tracker.log_incursion_payouts(self.session_id, payouts)
+        if not sites:
+            return
+        self.app.refresh()
+        count = f"{len(sites)} site" + ("s" if len(sites) > 1 else "")
+        total = sum(site.profit for site in sites)
+        self.notify(f"Logged {count} from EVE: {signed_isk(total)} ISK", profit_color(total))
 
     def build_start_form(self, frame):
         self.per_site = self.field(frame, 0, "Payout per site (million ISK)", 240, "e.g. 31")
