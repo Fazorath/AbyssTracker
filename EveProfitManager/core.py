@@ -4,6 +4,7 @@ Shared tracking logic and storage for the CLI and the desktop UI.
 All ISK amounts are in millions, all times are in minutes.
 """
 import hashlib
+import json
 import math
 import os
 import re
@@ -43,6 +44,13 @@ CREATE TABLE IF NOT EXISTS runs (
 );
 CREATE TABLE IF NOT EXISTS payouts (
     journal_id INTEGER PRIMARY KEY
+);
+CREATE TABLE IF NOT EXISTS loot (
+    session_id INTEGER PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,
+    baseline TEXT NOT NULL,
+    millions REAL,
+    unpriced INTEGER,
+    as_of TEXT
 );
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
@@ -109,6 +117,14 @@ class Run:
     minutes: float
     isk_after: float | None
     count: int
+
+
+@dataclass
+class Loot:
+    """A session's unsold loot: the market value of how its items changed since it started."""
+    millions: float
+    unpriced: int  # kinds of item that changed but have no market price
+    as_of: datetime  # when the assets it was valued from were read
 
 
 @dataclass
@@ -420,6 +436,48 @@ class Tracker:
             return row["isk_after"]
         session = self.session(session_id)
         return session.starting_isk if session else None
+
+    # --- loot -----------------------------------------------------------
+
+    def set_loot_baseline(self, session_id, quantities):
+        """
+        Remember what the character owned when the session started, by type_id.
+
+        Only the first baseline counts, so reading the assets again after a
+        restart doesn't wipe out loot already brought back.
+        """
+        with self.db:
+            self.db.execute(
+                "INSERT OR IGNORE INTO loot (session_id, baseline) VALUES (?, ?)",
+                (session_id, json.dumps(quantities)),
+            )
+
+    def loot_baseline(self, session_id):
+        """The quantities from set_loot_baseline, or None if none was taken."""
+        row = self.db.execute("SELECT baseline FROM loot WHERE session_id = ?", (session_id,)).fetchone()
+        return {int(t): q for t, q in json.loads(row["baseline"]).items()} if row else None
+
+    def set_loot(self, session_id, value, as_of):
+        """
+        Save the session's latest loot valuation.
+
+        Args:
+            session_id (int): Session with a baseline.
+            value (loot.LootValue): Worth of the change since the baseline.
+            as_of (datetime): When the assets it was valued from were read.
+        """
+        with self.db:
+            self.db.execute(
+                "UPDATE loot SET millions = ?, unpriced = ?, as_of = ? WHERE session_id = ?",
+                (value.millions, value.unpriced, as_of.isoformat(timespec="seconds"), session_id),
+            )
+
+    def loot(self, session_id):
+        """The session's latest Loot, or None if it hasn't been valued."""
+        row = self.db.execute(
+            "SELECT millions, unpriced, as_of FROM loot WHERE session_id = ? AND as_of IS NOT NULL", (session_id,)
+        ).fetchone()
+        return Loot(row["millions"], row["unpriced"], datetime.fromisoformat(row["as_of"])) if row else None
 
     # --- stats ----------------------------------------------------------
 
