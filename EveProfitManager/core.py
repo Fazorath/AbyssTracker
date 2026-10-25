@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS payouts (
 );
 CREATE TABLE IF NOT EXISTS loot (
     session_id INTEGER PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,
+    character_id INTEGER NOT NULL,
     baseline TEXT NOT NULL,
     millions REAL,
     unpriced INTEGER,
@@ -117,6 +118,13 @@ class Run:
     minutes: float
     isk_after: float | None
     count: int
+
+
+@dataclass
+class Baseline:
+    """What a character owned when a session started."""
+    character_id: int
+    quantities: dict  # type_id -> quantity
 
 
 @dataclass
@@ -439,7 +447,7 @@ class Tracker:
 
     # --- loot -----------------------------------------------------------
 
-    def set_loot_baseline(self, session_id, quantities):
+    def set_loot_baseline(self, session_id, character_id, quantities):
         """
         Remember what the character owned when the session started, by type_id.
 
@@ -448,14 +456,16 @@ class Tracker:
         """
         with self.db:
             self.db.execute(
-                "INSERT OR IGNORE INTO loot (session_id, baseline) VALUES (?, ?)",
-                (session_id, json.dumps(quantities)),
+                "INSERT OR IGNORE INTO loot (session_id, character_id, baseline) VALUES (?, ?, ?)",
+                (session_id, character_id, json.dumps(quantities)),
             )
 
     def loot_baseline(self, session_id):
-        """The quantities from set_loot_baseline, or None if none was taken."""
-        row = self.db.execute("SELECT baseline FROM loot WHERE session_id = ?", (session_id,)).fetchone()
-        return {int(t): q for t, q in json.loads(row["baseline"]).items()} if row else None
+        """The session's Baseline, or None if none was taken."""
+        row = self.db.execute("SELECT character_id, baseline FROM loot WHERE session_id = ?", (session_id,)).fetchone()
+        if row is None:
+            return None
+        return Baseline(row["character_id"], {int(t): q for t, q in json.loads(row["baseline"]).items()})
 
     def set_loot(self, session_id, value, as_of):
         """

@@ -864,6 +864,8 @@ class AbyssPage(SessionPage):
             self.LOCATION_POLL_MS, self.LOCATION_RETRY_MS, on_start=self.reset_watcher,
         ).switch
         self._valuing = False
+        self._loot_problem = None  # an asset error or mismatch, shown instead of the loot's time
+        self._loot_waiting = "reading assets..."  # shown before the session's first reading
         self._loot_poll()
 
     def _loot_poll(self):
@@ -879,19 +881,24 @@ class AbyssPage(SessionPage):
             return
         client, _ = self.signed_in_client()
         if client is None:
+            if self._loot_waiting != "sign in to value loot":
+                self._loot_waiting = "sign in to value loot"
+                self.refresh()
             return
-        session_id, priced = self.session_id, self.tracker.loot_baseline(self.session_id) is not None
+        self._loot_waiting = "reading assets..."
+        session_id = self.session_id
+        has_baseline = self.tracker.loot_baseline(session_id) is not None
         self._valuing = True
 
         def read():
-            return get_assets(client, client.character.id), get_prices(client) if priced else None
+            return get_assets(client, client.character.id), get_prices(client) if has_baseline else None
 
         def done(result, error):
             self._valuing = False
-            if session_id != self.session_id:  # the session ended while the read was out
-                return
-            if error is not None:
-                self.stats["loot"].set("—", sub=f"Assets: {error}")
+            if session_id != self.session_id:  # the session changed while the read was out
+                self.value_loot()
+            elif error is not None:
+                self.loot_failed(error)
             else:
                 self.take_assets(*result)
 
@@ -900,16 +907,28 @@ class AbyssPage(SessionPage):
     def take_assets(self, assets, prices):
         """Use an asset reading: the session's baseline if it has none, else value the change since."""
         baseline = self.tracker.loot_baseline(self.session_id)
+        self._loot_problem = None
         if baseline is None:
-            self.tracker.set_loot_baseline(self.session_id, assets.quantities)
+            self.tracker.set_loot_baseline(self.session_id, assets.character_id, assets.quantities)
+        elif baseline.character_id != assets.character_id:
+            self._loot_problem = "baseline is for another character"
         elif prices is not None:
-            self.tracker.set_loot(self.session_id, value_change(baseline, assets.quantities, prices),
+            self.tracker.set_loot(self.session_id, value_change(baseline.quantities, assets.quantities, prices),
                                   datetime.fromtimestamp(assets.fetched_at))
         self.refresh()
 
+    def loot_failed(self, error):
+        self._loot_problem = f"Assets: {error}"
+        self.refresh()
+
     def start_session(self):
+        self._loot_problem = None
         super().start_session()
         self.value_loot()
+
+    def end_note(self):
+        loot = self.tracker.loot(self.session_id)
+        return f"\n\nUnsold loot: {signed_isk(loot.millions)} ISK at market prices." if loot else ""
 
     def resume(self):
         super().resume()
@@ -1059,11 +1078,11 @@ class AbyssPage(SessionPage):
         if loot:
             unpriced = f" · {loot.unpriced} unpriced" if loot.unpriced else ""
             self.stats["loot"].set(signed_isk(loot.millions), profit_color(loot.millions),
-                                   f"assets at {loot.as_of:%H:%M}{unpriced}")
+                                   self._loot_problem or f"from EVE at {loot.as_of:%H:%M}{unpriced}")
         elif self.tracker.loot_baseline(session.id) is not None:
-            self.stats["loot"].set(signed_isk(0), sub="ESI updates assets hourly")
+            self.stats["loot"].set(signed_isk(0), sub=self._loot_problem or "ESI updates assets hourly")
         else:
-            self.stats["loot"].set("—", sub="sign in to value loot")
+            self.stats["loot"].set("—", sub=self._loot_problem or self._loot_waiting)
 
 
 class IncursionPage(SessionPage):

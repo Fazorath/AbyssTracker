@@ -53,7 +53,9 @@ This program is designed to help users track their profits and time spent during
     used up (filaments, ammo, a lost ship). Prices are CCP's average market prices, so the figure is an estimate,
     not a Jita quote. Abyssal modules have no market price and are counted as *unpriced*; blueprint copies are
     left out. ESI refreshes assets only hourly, so the loot catches up with your runs up to an hour later; keep the
-    session open until it does.
+    session open until it does. For the same reason, sign in before starting the session, and give ESI time to
+    catch up after the last one, or its loot is counted in the new session. Loot listed on the market leaves your
+    assets, so it drops out of the figure until it sells and shows in the wallet.
   - Every run is saved immediately, so closing the app mid-session picks up where you left off.
   - Amounts are in millions of ISK; you can type `1,250`, `1.25b` or `800k`. Times accept `14.5` or `14:30`.
 

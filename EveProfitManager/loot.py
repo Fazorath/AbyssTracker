@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class Assets:
+    character_id: int
     quantities: dict  # type_id -> how many the character owns, in every hangar and cargo hold
     fetched_at: float  # when ESI last answered; it caches the asset list for an hour
 
@@ -30,7 +31,7 @@ def get_assets(client, character_id):
     for entry in items:
         if not entry.get("is_blueprint_copy"):
             quantities[entry["type_id"]] = quantities.get(entry["type_id"], 0) + entry["quantity"]
-    return Assets(quantities=quantities, fetched_at=client.fetched_at(first))
+    return Assets(character_id=character_id, quantities=quantities, fetched_at=client.fetched_at(first))
 
 
 def get_prices(client):

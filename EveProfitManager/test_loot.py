@@ -36,7 +36,7 @@ class GetAssetsTests(unittest.TestCase):
             f"{ASSETS}?page=2": [item(47_762, 2, location_flag="Cargo")],
         }, pages={f"{ASSETS}?page=1": 2}, fetched_at=1_700_000_123.0)
         self.assertEqual(get_assets(client, 123),
-                         Assets(quantities={47_762: 5, 34: 1_000}, fetched_at=1_700_000_123.0))
+                         Assets(character_id=123, quantities={47_762: 5, 34: 1_000}, fetched_at=1_700_000_123.0))
 
     def test_rejects_a_response_that_is_not_a_list_of_items(self):
         for body in ({"error": "x"}, [{"type_id": 34}], [item(34, quantity="5")]):

@@ -43,22 +43,33 @@ class AbyssLootPageTest(unittest.TestCase):
         return self.loot.value.cget("text"), self.loot.sub.cget("text")
 
     def test_shows_the_value_of_what_came_back_beside_the_wallet_profit(self):
-        self.page.take_assets(Assets({34: 10_000, 47_762: 1}, READ_AT), None)  # at the session start
-        self.page.take_assets(Assets({34: 10_000, 49_000: 2}, READ_AT), {47_762: 1_200_000.0, 49_000: 2_100_000.0})
+        self.page.take_assets(Assets(123, {34: 10_000, 47_762: 1}, READ_AT), None)  # at the session start
+        self.page.take_assets(Assets(123, {34: 10_000, 49_000: 2}, READ_AT), {47_762: 1_200_000.0, 49_000: 2_100_000.0})
         value, sub = self.shown()
         self.assertEqual(value, "+3.0M")
         self.assertIn("18:40", sub)
         self.assertEqual(self.page.stats["profit"].value.cget("text"), "0.0M")  # the wallet hasn't changed
 
     def test_says_how_many_kinds_of_item_have_no_price(self):
-        self.page.take_assets(Assets({}, READ_AT), None)
-        self.page.take_assets(Assets({52_227: 1, 52_228: 1}, READ_AT), {})
+        self.page.take_assets(Assets(123, {}, READ_AT), None)
+        self.page.take_assets(Assets(123, {52_227: 1, 52_228: 1}, READ_AT), {})
         self.assertIn("2 unpriced", self.shown()[1])
 
     def test_waits_for_the_first_reading_before_valuing_anything(self):
-        self.page.take_assets(Assets({34: 10_000}, READ_AT), None)
+        self.page.take_assets(Assets(123, {34: 10_000}, READ_AT), None)
         self.assertEqual(self.shown()[0], "0.0M")
         self.assertIsNone(self.tracker.loot(self.page.session_id))
+
+    def test_a_reading_for_another_character_is_not_valued_against_the_baseline(self):
+        self.page.take_assets(Assets(123, {34: 10_000}, READ_AT), None)
+        self.page.take_assets(Assets(456, {49_000: 50}, READ_AT), {49_000: 2_100_000.0})  # switched character
+        self.assertIsNone(self.tracker.loot(self.page.session_id))
+        self.assertIn("another character", self.shown()[1])
+
+    def test_an_asset_error_stays_shown_after_a_refresh(self):
+        self.page.loot_failed("ESI returned 403")
+        self.app.refresh()
+        self.assertIn("403", self.shown()[1])
 
 
 if __name__ == "__main__":

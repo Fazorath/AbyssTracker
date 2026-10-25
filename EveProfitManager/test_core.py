@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from core import ABYSS, INCURSION, Loot, Totals, Tracker, best_weather, isk_per_hour, parse_sessions_txt
+from core import ABYSS, INCURSION, Baseline, Loot, Totals, Tracker, best_weather, isk_per_hour, parse_sessions_txt
 from journal import Payout
 from loot import LootValue
 
@@ -266,20 +266,20 @@ class LootTest(unittest.TestCase):
 
     def test_the_first_baseline_of_a_session_is_the_one_kept(self):
         self.assertIsNone(self.tracker.loot_baseline(self.sid))
-        self.tracker.set_loot_baseline(self.sid, {34: 1_000, 47_762: 2})
-        self.tracker.set_loot_baseline(self.sid, {34: 5})  # e.g. read again after a restart
-        self.assertEqual(self.tracker.loot_baseline(self.sid), {34: 1_000, 47_762: 2})
+        self.tracker.set_loot_baseline(self.sid, 123, {34: 1_000, 47_762: 2})
+        self.tracker.set_loot_baseline(self.sid, 456, {34: 5})  # e.g. read again after a restart
+        self.assertEqual(self.tracker.loot_baseline(self.sid), Baseline(123, {34: 1_000, 47_762: 2}))
 
     def test_the_latest_valuation_is_kept_with_when_the_assets_were_read(self):
         self.assertIsNone(self.tracker.loot(self.sid))
-        self.tracker.set_loot_baseline(self.sid, {})
+        self.tracker.set_loot_baseline(self.sid, 123, {})
         as_of = datetime(2026, 10, 25, 18, 40)
         self.tracker.set_loot(self.sid, LootValue(millions=12.5, unpriced=0), datetime(2026, 10, 25, 18, 0))
         self.tracker.set_loot(self.sid, LootValue(millions=48.25, unpriced=2), as_of)
         self.assertEqual(self.tracker.loot(self.sid), Loot(millions=48.25, unpriced=2, as_of=as_of))
 
     def test_an_abandoned_session_takes_its_loot_with_it(self):
-        self.tracker.set_loot_baseline(self.sid, {34: 1_000})
+        self.tracker.set_loot_baseline(self.sid, 123, {34: 1_000})
         self.tracker.end_session(self.sid)  # no runs, so the session is deleted
         self.assertIsNone(self.tracker.loot_baseline(self.sid))
 
