@@ -25,6 +25,7 @@ class EsiClient:
         self._access_expires = 0.0
         self._cache = {}  # path -> (etag, expires_at, body)
         self._fetched = {}  # path -> when ESI last answered for it
+        self._pages = {}  # path -> X-Pages from its last answer, for paged lists
         self._blocked_until = 0.0
         self._token_lock = threading.Lock()  # the wallet and location reads run on separate threads
         self._session = requests.Session()
@@ -54,6 +55,10 @@ class EsiClient:
     def fetched_at(self, path):
         """When ESI last answered for this path (0 if never)."""
         return self._fetched.get(path, 0.0)
+
+    def pages(self, path):
+        """How many pages ESI said a paged list has, as of its last answer for `path` (1 if it didn't say)."""
+        return self._pages.get(path, 1)
 
     def get(self, path, auth=True):
         """GET an ESI path (no version prefix). Returns decoded JSON."""
@@ -87,6 +92,9 @@ class EsiClient:
             raise EsiError(f"ESI returned {response.status_code}: {response.text}")
 
         self._fetched[path] = time.time()
+        pages = response.headers.get("X-Pages")
+        if pages is not None and pages.isdigit():
+            self._pages[path] = int(pages)
         expires = response.headers.get("Expires")
         if expires:
             try:
