@@ -4,10 +4,12 @@ Desktop UI for the Abyss and Incursion tracker.
 Run with:  python gui.py
 """
 import math
+import sqlite3
 import sys
 import threading
 import time
 import tkinter as tk
+from datetime import datetime
 from tkinter import filedialog, messagebox
 from tkinter import font as tkfont
 
@@ -1365,10 +1367,16 @@ class HistoryPage(ctk.CTkFrame):
         self.toolbar = ctk.CTkFrame(app.header, fg_color="transparent")
         self.span = ctk.CTkLabel(self.toolbar, text="", font=font(13), text_color=t.soft)
         self.span.pack(side="left", padx=(0, 14))
-        ctk.CTkButton(
-            self.toolbar, text="Import Sessions.txt", width=160, height=34, fg_color="transparent", border_width=1,
-            border_color=t.line, hover_color=t.panel, text_color=INK, command=self.import_txt,
-        ).pack(side="left")
+        for text, width, command in (
+            ("Import Sessions.txt", 160, self.import_txt),
+            ("Export CSV", 100, self.export_csv),
+            ("Back up", 80, self.back_up),
+            ("Restore", 80, self.restore),
+        ):
+            ctk.CTkButton(
+                self.toolbar, text=text, width=width, height=34, fg_color="transparent", border_width=1,
+                border_color=t.line, hover_color=t.panel, text_color=INK, command=command,
+            ).pack(side="left", padx=(0, 8))
 
         self.filter = ChipGroup(self, list(self.FILTERS), "All", lambda _v: self.refresh())
         self.filter.set_theme(t)
@@ -1503,6 +1511,57 @@ class HistoryPage(ctk.CTkFrame):
             messagebox.showerror("Import failed", str(err), parent=self)
             return
         messagebox.showinfo("Import", f"Imported {count} session{'s' if count != 1 else ''}.", parent=self)
+        self.app.refresh()
+
+    def export_csv(self):
+        name = self.filter.get()
+        path = filedialog.asksaveasfilename(
+            parent=self, title="Export CSV", defaultextension=".csv", initialfile=f"abyss-tracker-{name.lower()}.csv",
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+        try:
+            count = self.tracker.export_csv(path, self.FILTERS[name])
+        except OSError as err:
+            messagebox.showerror("Export failed", str(err), parent=self)
+            return
+        messagebox.showinfo("Export", f"Exported {count} row{'s' if count != 1 else ''}.", parent=self)
+
+    def back_up(self):
+        path = filedialog.asksaveasfilename(
+            parent=self, title="Back up tracker.db", defaultextension=".db",
+            initialfile=f"tracker-{datetime.now():%Y-%m-%d}.db",
+            filetypes=[("Database files", "*.db"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+        try:
+            self.tracker.backup(path)
+        except (OSError, ValueError, sqlite3.Error) as err:
+            messagebox.showerror("Backup failed", str(err), parent=self)
+            return
+        messagebox.showinfo("Backup", "Backup saved.", parent=self)
+
+    def restore(self):
+        path = filedialog.askopenfilename(
+            parent=self, title="Restore from backup", filetypes=[("Database files", "*.db"), ("All files", "*.*")]
+        )
+        if not path or not messagebox.askyesno(
+            "Restore backup",
+            "Replace all sessions and runs with this backup?\n\nEverything logged since it was made is lost. "
+            "This can't be undone.",
+            parent=self,
+        ):
+            return
+        try:
+            self.tracker.restore(path)
+        except (OSError, ValueError, sqlite3.Error) as err:
+            messagebox.showerror("Restore failed", str(err), parent=self)
+            return
+        for kind in (ABYSS, INCURSION):  # a live session id may now point at nothing, or at a different session
+            self.app.pages[kind].resume()
+        messagebox.showinfo("Restore", "Backup restored.", parent=self)
         self.app.refresh()
 
 

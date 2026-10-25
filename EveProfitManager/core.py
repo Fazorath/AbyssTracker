@@ -3,6 +3,7 @@ Shared tracking logic and storage for the CLI and the desktop UI.
 
 All ISK amounts are in millions, all times are in minutes.
 """
+import csv
 import hashlib
 import math
 import os
@@ -173,6 +174,9 @@ class Tracker:
         self.db = sqlite3.connect(path)
         self.db.row_factory = sqlite3.Row
         self.db.execute("PRAGMA foreign_keys = ON")
+        self._migrate()
+
+    def _migrate(self):
         self.db.executescript(SCHEMA)
         columns = [r["name"] for r in self.db.execute("PRAGMA table_info(sessions)")]
         # Columns added after the first release, for databases created before them
@@ -495,6 +499,86 @@ class Tracker:
                 imported += 1
         return imported
 
+    # --- export and backup ----------------------------------------------
+
+    def export_csv(self, path, kind=None):
+        """
+        Write every run with its session to a CSV file, oldest session first.
+
+        A session with no runs yet gets one row with the run columns empty.
+
+        Args:
+            path (str | Path): File to write, replacing any existing one.
+            kind (str, optional): Only export ABYSS or INCURSION sessions.
+
+        Returns:
+            int: Number of rows written.
+        """
+        where, args = ("WHERE s.kind = ?", (kind,)) if kind else ("", ())
+        rows = self.db.execute(
+            "SELECT s.id AS session_id, s.kind, s.started_at, s.ended_at, s.weather, s.tier, s.imported, "
+            "r.id AS run_id, r.recorded_at, r.profit AS profit_millions, r.minutes, "
+            "r.isk_after AS isk_after_millions, r.count AS runs "
+            f"FROM sessions s LEFT JOIN runs r ON r.session_id = s.id {where} ORDER BY s.started_at, s.id, r.id",
+            args,
+        ).fetchall()
+        with open(path, "w", newline="", encoding="utf-8") as f:
+            out = csv.writer(f)
+            out.writerow(_CSV_COLUMNS)
+            out.writerows(tuple("" if row[c] is None else row[c] for c in _CSV_COLUMNS) for row in rows)
+        return len(rows)
+
+    def backup(self, path):
+        """
+        Save a consistent copy of the whole database, replacing any file at path.
+
+        Args:
+            path (str | Path): Where to put the copy.
+
+        Raises:
+            ValueError: If path is the live database itself.
+        """
+        live = self.db.execute("PRAGMA database_list").fetchone()["file"]
+        if live and os.path.exists(path) and os.path.samefile(live, path):
+            raise ValueError("Choose a different file than the live database")
+        target = sqlite3.connect(path)
+        try:
+            self.db.backup(target)
+        finally:
+            target.close()
+
+    def restore(self, path):
+        """
+        Replace all data with the contents of a backup made by backup().
+
+        The file is checked first, so a bad file leaves the current data alone.
+        Backups from older versions are brought up to the current schema.
+
+        Args:
+            path (str | Path): Backup file.
+
+        Raises:
+            ValueError: If path isn't an intact tracker database.
+        """
+        try:
+            source = sqlite3.connect(f"{Path(path).resolve().as_uri()}?mode=ro", uri=True)
+        except sqlite3.Error as err:
+            raise ValueError(f"Can't open {path}: {err}") from err
+        try:
+            try:
+                if source.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+                    raise ValueError("The backup file is damaged")
+                tables = {r[0] for r in source.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+            except sqlite3.DatabaseError as err:
+                raise ValueError("That isn't an AbyssTracker database") from err
+            if not {"sessions", "runs"} <= tables:
+                raise ValueError("That isn't an AbyssTracker database")
+            source.backup(self.db)
+        finally:
+            source.close()
+        self._migrate()
+        self.db.commit()
+
 
 def parse_sessions_txt(text):
     """
@@ -582,6 +666,11 @@ def _require_filament(kind, weather, tier):
 def _now():
     return datetime.now().isoformat(timespec="seconds")
 
+
+_CSV_COLUMNS = (
+    "session_id", "kind", "started_at", "ended_at", "weather", "tier", "imported",
+    "run_id", "recorded_at", "profit_millions", "minutes", "isk_after_millions", "runs",
+)
 
 _SESSION_QUERY = (
     "SELECT s.*, COALESCE(SUM(r.profit), 0) AS profit, COALESCE(SUM(r.minutes), 0) AS minutes, "
