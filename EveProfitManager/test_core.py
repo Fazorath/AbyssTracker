@@ -229,7 +229,7 @@ class IncursionPayoutTest(unittest.TestCase):
         self.start = self.tracker.session(self.sid).started_at
 
     def payout(self, journal_id, minutes_in, millions=31.5):
-        return Payout(journal_id=journal_id, at=self.start + timedelta(minutes=minutes_in), millions=millions)
+        return Payout(journal_id=journal_id, paid_at=self.start + timedelta(minutes=minutes_in), millions=millions)
 
     def test_each_payout_is_a_site_timed_from_the_one_before(self):
         logged = self.tracker.log_incursion_payouts(self.sid, [self.payout(1, 9), self.payout(2, 21, millions=28.75)])

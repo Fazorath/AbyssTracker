@@ -299,31 +299,37 @@ class Tracker:
         """
         started_at = self.session(session_id).started_at
         logged = []
-        for payout in sorted(payouts, key=lambda p: (p.at, p.journal_id)):
+        for payout in sorted(payouts, key=lambda p: (p.paid_at, p.journal_id)):
             seen = self.db.execute("SELECT 1 FROM payouts WHERE journal_id = ?", (payout.journal_id,)).fetchone()
-            if seen or payout.at < started_at:
+            if seen or payout.paid_at < started_at:
                 continue
+            paid_at = payout.paid_at.isoformat(timespec="seconds")
             row = self.db.execute(
                 "SELECT MAX(recorded_at) AS last FROM runs WHERE session_id = ? AND recorded_at <= ?",
-                (session_id, payout.at.isoformat(timespec="seconds")),
+                (session_id, paid_at),
             ).fetchone()
             since = datetime.fromisoformat(row["last"]) if row["last"] else started_at
-            with self.db:
+            with self.db:  # the site and its payout are saved together, or neither is
                 self.db.execute("INSERT INTO payouts (journal_id) VALUES (?)", (payout.journal_id,))
-            logged.append(self._add_run(
-                session_id, payout.millions, (payout.at - since).total_seconds() / 60, None,
-                recorded_at=payout.at.isoformat(timespec="seconds"),
-            ))
+                run_id = self._insert_run(
+                    session_id, payout.millions, (payout.paid_at - since).total_seconds() / 60, None, 1, paid_at
+                )
+            logged.append(self.run(run_id))
         return logged
 
     def _add_run(self, session_id, profit, minutes, isk_after, count=1, recorded_at=None):
         with self.db:
-            cur = self.db.execute(
-                "INSERT INTO runs (session_id, recorded_at, profit, minutes, isk_after, count) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
-                (session_id, recorded_at or _now(), profit, minutes, isk_after, count),
-            )
-        return self.run(cur.lastrowid)
+            run_id = self._insert_run(session_id, profit, minutes, isk_after, count, recorded_at)
+        return self.run(run_id)
+
+    def _insert_run(self, session_id, profit, minutes, isk_after, count, recorded_at):
+        """Insert a run inside the caller's transaction; returns its id."""
+        cur = self.db.execute(
+            "INSERT INTO runs (session_id, recorded_at, profit, minutes, isk_after, count) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (session_id, recorded_at or _now(), profit, minutes, isk_after, count),
+        )
+        return cur.lastrowid
 
     def run(self, run_id):
         row = self.db.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()

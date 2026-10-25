@@ -33,8 +33,8 @@ class GetIncursionPayoutsTests(unittest.TestCase):
             entry(1, "2026-10-25T18:28:00Z", 28_750_000.0),
         ]})
         self.assertEqual(get_incursion_payouts(client, 123), [
-            Payout(journal_id=1, at=local("2026-10-25T18:28:00"), millions=28.75),
-            Payout(journal_id=3, at=local("2026-10-25T18:40:00"), millions=31.5),
+            Payout(journal_id=1, paid_at=local("2026-10-25T18:28:00"), millions=28.75),
+            Payout(journal_id=3, paid_at=local("2026-10-25T18:40:00"), millions=31.5),
         ])
 
     def test_skips_entries_that_take_isk_away(self):

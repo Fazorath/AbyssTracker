@@ -35,7 +35,7 @@ class IncursionPayoutPageTest(unittest.TestCase):
         self.page.auto_log.select()  # as if switched on, without starting the ESI poll
 
     def payout(self, journal_id, minutes_in, millions):
-        return Payout(journal_id=journal_id, at=self.start + timedelta(minutes=minutes_in), millions=millions)
+        return Payout(journal_id=journal_id, paid_at=self.start + timedelta(minutes=minutes_in), millions=millions)
 
     def test_new_payouts_are_logged_as_sites_and_announced(self):
         self.page.take_payouts([self.payout(1, 11, 31.5), self.payout(2, 23, 28.75)])
@@ -49,6 +49,13 @@ class IncursionPayoutPageTest(unittest.TestCase):
         self.page.message.configure(text="")
         self.page.take_payouts([self.payout(1, 11, 31.5)])
         self.assertEqual(self.page.message.cget("text"), "")
+
+    def test_sites_cannot_be_logged_by_hand_while_payouts_come_from_eve(self):
+        self.page.payout.insert(0, "31")
+        self.page.minutes.insert(0, "12")
+        self.page.log()  # its payout would log the same site a second time
+        self.assertEqual(self.tracker.session(self.page.session_id).runs, 0)
+        self.assertIn("logged from EVE", self.page.message.cget("text"))
 
     def test_does_nothing_while_the_switch_is_off(self):
         self.page.auto_log.deselect()
