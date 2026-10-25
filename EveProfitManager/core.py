@@ -544,6 +544,10 @@ class Tracker:
         target = sqlite3.connect(path)
         try:
             self.db.backup(target)
+        except sqlite3.Error:
+            target.close()
+            Path(path).unlink(missing_ok=True)  # don't leave half a backup that looks like a real one
+            raise
         finally:
             target.close()
 
@@ -569,8 +573,8 @@ class Tracker:
                 if source.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
                     raise ValueError("The backup file is damaged")
                 tables = {r[0] for r in source.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
-            except sqlite3.DatabaseError as err:
-                raise ValueError("That isn't an AbyssTracker database") from err
+            except sqlite3.DatabaseError:
+                tables = set()
             if not {"sessions", "runs"} <= tables:
                 raise ValueError("That isn't an AbyssTracker database")
             source.backup(self.db)
