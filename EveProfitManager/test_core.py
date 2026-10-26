@@ -4,9 +4,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from core import ABYSS, INCURSION, Baseline, Loot, Totals, Tracker, best_weather, isk_per_hour, parse_sessions_txt
+from core import ABYSS, INCURSION, Totals, Tracker, best_weather, isk_per_hour, parse_sessions_txt
 from journal import Payout
-from loot import LootValue
 
 OLD_FILE = """Abyss Details!
 
@@ -259,29 +258,32 @@ class IncursionPayoutTest(unittest.TestCase):
         self.assertAlmostEqual(logged[0].minutes, (self.start + timedelta(minutes=30) - manual).total_seconds() / 60)
 
 
-class LootTest(unittest.TestCase):
-    def setUp(self):
-        self.tracker = Tracker(":memory:")
-        self.sid = self.tracker.start_session(ABYSS, starting_isk=1000)
+class LootTableTest(unittest.TestCase):
+    def tables(self, db):
+        return {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
 
-    def test_the_first_baseline_of_a_session_is_the_one_kept(self):
-        self.assertIsNone(self.tracker.loot_baseline(self.sid))
-        self.tracker.set_loot_baseline(self.sid, 123, {34: 1_000, 47_762: 2})
-        self.tracker.set_loot_baseline(self.sid, 456, {34: 5})  # e.g. read again after a restart
-        self.assertEqual(self.tracker.loot_baseline(self.sid), Baseline(123, {34: 1_000, 47_762: 2}))
+    def test_a_new_database_has_no_loot_table(self):
+        tracker = Tracker(":memory:")
+        self.assertNotIn("loot", self.tables(tracker.db))
 
-    def test_the_latest_valuation_is_kept_with_when_the_assets_were_read(self):
-        self.assertIsNone(self.tracker.loot(self.sid))
-        self.tracker.set_loot_baseline(self.sid, 123, {})
-        as_of = datetime(2026, 10, 25, 18, 40)
-        self.tracker.set_loot(self.sid, LootValue(millions=12.5, unpriced=0), datetime(2026, 10, 25, 18, 0))
-        self.tracker.set_loot(self.sid, LootValue(millions=48.25, unpriced=2), as_of)
-        self.assertEqual(self.tracker.loot(self.sid), Loot(millions=48.25, unpriced=2, as_of=as_of))
-
-    def test_an_abandoned_session_takes_its_loot_with_it(self):
-        self.tracker.set_loot_baseline(self.sid, 123, {34: 1_000})
-        self.tracker.end_session(self.sid)  # no runs, so the session is deleted
-        self.assertIsNone(self.tracker.loot_baseline(self.sid))
+    def test_an_old_database_with_a_loot_table_still_opens_and_keeps_it(self):
+        with TemporaryDirectory() as folder:
+            path = str(Path(folder) / "old.db")
+            tracker = Tracker(path)
+            sid = tracker.start_session(ABYSS, starting_isk=1000)
+            tracker.db.execute(
+                "CREATE TABLE loot (session_id INTEGER PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE, "
+                "character_id INTEGER NOT NULL, baseline TEXT NOT NULL, millions REAL, unpriced INTEGER, as_of TEXT)"
+            )
+            tracker.db.execute("INSERT INTO loot (session_id, character_id, baseline) VALUES (?, 1, '{}')", (sid,))
+            tracker.db.commit()
+            tracker.close()
+            reopened = Tracker(path)
+            self.assertIn("loot", self.tables(reopened.db))
+            self.assertEqual(reopened.session(sid).starting_isk, 1000)
+            reopened.log_abyss_run(sid, 1000, 1050, 10)
+            self.assertEqual(len(reopened.runs(sid)), 1)
+            reopened.close()
 
 
 class ImportTest(unittest.TestCase):
