@@ -1,6 +1,6 @@
 import unittest
 
-from loot import Assets, LootValue, get_assets, get_prices, value_change
+from loot import Assets, get_assets, get_prices
 
 ASSETS = "/characters/123/assets"
 
@@ -57,18 +57,6 @@ class GetPricesTests(unittest.TestCase):
         for body in ({"error": "x"}, [{"average_price": 4.5}], [{"type_id": 34, "average_price": "4.5"}]):
             with self.subTest(body=body), self.assertRaises(ValueError):
                 get_prices(FakeClient({"/markets/prices": body}))
-
-
-class ValueChangeTests(unittest.TestCase):
-    def test_values_what_was_gained_less_what_was_used_up_in_millions(self):
-        before = {34: 10_000, 47_762: 1, 30_000: 500}  # tritanium, a filament, ammo
-        after = {34: 10_000, 30_000: 100, 49_000: 2}  # filament used, ammo shot, two drops
-        prices = {34: 4.5, 47_762: 1_200_000.0, 30_000: 500.0, 49_000: 2_100_000.0}
-        self.assertEqual(value_change(before, after, prices), LootValue(millions=2.8, unpriced=0))
-
-    def test_counts_the_kinds_of_item_with_no_price(self):
-        self.assertEqual(value_change({}, {52_227: 1, 52_228: 1, 34: 1_000_000}, {34: 4.5}),
-                         LootValue(millions=4.5, unpriced=2))
 
 
 if __name__ == "__main__":

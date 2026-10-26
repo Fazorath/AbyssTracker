@@ -1,4 +1,4 @@
-"""Value the items a session brought back, from the character's assets on ESI and market prices."""
+"""Read the character's assets from ESI and the market prices that value them."""
 from dataclasses import dataclass
 
 
@@ -7,12 +7,6 @@ class Assets:
     character_id: int
     quantities: dict  # type_id -> how many the character owns, in every hangar and cargo hold
     fetched_at: float  # when ESI last answered; it caches the asset list for an hour
-
-
-@dataclass(frozen=True)
-class LootValue:
-    millions: float  # ISK, at market prices
-    unpriced: int  # kinds of item that changed but have no market price, like abyssal modules
 
 
 def get_assets(client, character_id):
@@ -53,26 +47,6 @@ def get_prices(client):
             raise ValueError(f"Unexpected price: {entry!r}")
         prices[entry["type_id"]] = price
     return prices
-
-
-def value_change(before, after, prices):
-    """
-    What the change from the `before` quantities to the `after` ones is worth.
-
-    Items gained count for their value and items used up (filaments, ammo, a
-    lost ship) against it, so buying something only moves ISK out of the wallet
-    and into the loot.
-    """
-    isk, unpriced = 0.0, 0
-    for type_id in before.keys() | after.keys():
-        change = after.get(type_id, 0) - before.get(type_id, 0)
-        if not change:
-            continue
-        if type_id in prices:
-            isk += change * prices[type_id]
-        else:
-            unpriced += 1
-    return LootValue(millions=isk / 1e6, unpriced=unpriced)
 
 
 def _items(body):

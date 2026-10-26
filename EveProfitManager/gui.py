@@ -31,7 +31,6 @@ from core import (
 from clock import read_clock
 from journal import get_incursion_payouts
 from location import AbyssWatcher, get_location
-from loot import get_assets, get_prices, value_change
 from wallet import get_wallet
 from account import SIGN_IN_ERRORS, Account
 from theme import NEUTRAL_THEME, asset_path, load_fonts, theme_for, ui_family
@@ -864,76 +863,47 @@ class AbyssPage(SessionPage):
             lambda location: self.see_abyss(location.in_abyss), "Location",
             self.LOCATION_POLL_MS, self.LOCATION_RETRY_MS, on_start=self.reset_watcher,
         ).switch
-        self._valuing = False
-        self._loot_problem = None  # an asset error or mismatch, shown instead of the loot's time
-        self._loot_waiting = "reading assets..."  # shown before the session's first reading
-        self._loot_poll()
+        self._wallet = None  # the latest Wallet read from ESI
+        self._wallet_note = "reading wallet..."  # the stat's sub-line when there is no reading to date
+        self._wallet_problem = None  # a read error, shown instead of the reading's time
+        self._reading_wallet = False
 
-    def _loot_poll(self):
-        self.value_loot()
-        self.after(self.LOOT_POLL_MS, self._loot_poll)
-
-    def value_loot(self):
-        """
-        Read the assets off the UI thread: the first reading of a session is its
-        baseline, and later ones value what changed since. Quiet when signed out.
-        """
-        if self.session_id is None or self._valuing:
+    def read_wallet(self):
+        """Read the wallet off the UI thread for the read-only Wallet stat. Quiet when signed out."""
+        if self.session_id is None or self._reading_wallet:
             return
-        client, _ = self.signed_in_client()
+        client, why = self.signed_in_client()
+        self._wallet_problem = None
         if client is None:
-            if self._loot_waiting != "sign in to value loot":
-                self._loot_waiting = "sign in to value loot"
-                self.refresh()
+            self._wallet = None
+            self._wallet_note = "sign in under Settings to see it"
+            self.refresh()
             return
-        self._loot_waiting = "reading assets..."
+        self._reading_wallet = True
         session_id = self.session_id
-        has_baseline = self.tracker.loot_baseline(session_id) is not None
-        self._valuing = True
 
-        def read():
-            return get_assets(client, client.character.id), get_prices(client) if has_baseline else None
-
-        def done(result, error):
-            self._valuing = False
+        def done(wallet, error):
+            self._reading_wallet = False
             if session_id != self.session_id:  # the session changed while the read was out
-                self.value_loot()
-            elif error is not None:
-                self.loot_failed(error)
+                self.read_wallet()
+                return
+            if error is not None:
+                self._wallet_problem = f"Wallet: {error}"
             else:
-                self.take_assets(*result)
+                self._wallet = wallet
+            self.refresh()
 
-        self.app.run_async(read, done)
-
-    def take_assets(self, assets, prices):
-        """Use an asset reading: the session's baseline if it has none, else value the change since."""
-        baseline = self.tracker.loot_baseline(self.session_id)
-        self._loot_problem = None
-        if baseline is None:
-            self.tracker.set_loot_baseline(self.session_id, assets.character_id, assets.quantities)
-        elif baseline.character_id != assets.character_id:
-            self._loot_problem = "baseline is for another character"
-        elif prices is not None:
-            self.tracker.set_loot(self.session_id, value_change(baseline.quantities, assets.quantities, prices),
-                                  datetime.fromtimestamp(assets.fetched_at))
-        self.refresh()
-
-    def loot_failed(self, error):
-        self._loot_problem = f"Assets: {error}"
-        self.refresh()
+        self.app.run_async(lambda: get_wallet(client, client.character.id), done)
 
     def start_session(self):
-        self._loot_problem = None
+        self._wallet = None
+        self._wallet_note = "reading wallet..."
         super().start_session()
-        self.value_loot()
-
-    def end_note(self):
-        loot = self.tracker.loot(self.session_id)
-        return f"\n\nUnsold loot: {signed_isk(loot.millions)} ISK at market prices." if loot else ""
+        self.read_wallet()
 
     def resume(self):
         super().resume()
-        self.value_loot()
+        self.read_wallet()
 
     def build_start_form(self, frame):
         self.start_isk = self.field(frame, 0, "Wallet now (million ISK)", 220, "e.g. 1,250 or 1.25b")
@@ -1028,7 +998,7 @@ class AbyssPage(SessionPage):
         return self.after_isk, self.time_left
 
     def stat_labels(self):
-        return [("profit", "Session"), ("loot", "Loot (unsold)"), ("rate", "ISK/hr"), ("time", "Time"),
+        return [("profit", "Session"), ("rate", "ISK/hr"), ("time", "Time"),
                 ("wallet", "Wallet")]
 
     def timer_caption(self, session):
@@ -1056,7 +1026,7 @@ class AbyssPage(SessionPage):
     def after_log(self):
         self.after_isk.delete(0, "end")
         self.time_left.delete(0, "end")
-        self.value_loot()
+        self.read_wallet()
 
     def edit_fields(self, run):
         return [("Wallet after run (M)", f"{run.isk_after:g}"), ("Time left (min)", f"{MAXTIME - run.minutes:g}")]
@@ -1073,17 +1043,11 @@ class AbyssPage(SessionPage):
         self.stats["rate"].set(format_isk(session.isk_per_hour))
         self.stats["time"].set(format_minutes(session.minutes),
                                sub=f"{session.runs} runs" if runs else "")
-        self.stats["wallet"].set(format_isk(self.tracker.current_isk(session.id) or 0),
-                                 sub=f"from {format_isk(session.starting_isk or 0)}")
-        loot = self.tracker.loot(session.id)
-        if loot:
-            unpriced = f" · {loot.unpriced} unpriced" if loot.unpriced else ""
-            self.stats["loot"].set(signed_isk(loot.millions), profit_color(loot.millions),
-                                   self._loot_problem or f"from EVE at {loot.as_of:%H:%M}{unpriced}")
-        elif self.tracker.loot_baseline(session.id) is not None:
-            self.stats["loot"].set(signed_isk(0), sub=self._loot_problem or "ESI updates assets hourly")
+        if self._wallet:
+            self.stats["wallet"].set(format_isk(self._wallet.millions), sub=self._wallet_problem or
+                                     f"from EVE at {datetime.fromtimestamp(self._wallet.fetched_at):%H:%M}")
         else:
-            self.stats["loot"].set("—", sub=self._loot_problem or self._loot_waiting)
+            self.stats["wallet"].set("—", sub=self._wallet_problem or self._wallet_note)
 
 
 class IncursionPage(SessionPage):
