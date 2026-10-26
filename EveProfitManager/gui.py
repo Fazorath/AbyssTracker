@@ -852,7 +852,6 @@ class AbyssPage(SessionPage):
     pocket_label = "Wallet after run (M)"
     LOCATION_POLL_MS = 5000  # ESI caches the location for 5 s; the client never asks sooner
     LOCATION_RETRY_MS = 30000  # after a failed read
-    LOOT_POLL_MS = 5 * 60 * 1000  # ESI caches assets for an hour; the client never asks sooner
 
     def __init__(self, master, app):
         super().__init__(master, app)

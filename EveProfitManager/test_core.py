@@ -279,11 +279,11 @@ class LootTableTest(unittest.TestCase):
             tracker.db.commit()
             tracker.close()
             reopened = Tracker(path)
-            self.addCleanup(reopened.close)
             self.assertIn("loot", self.tables(reopened.db))
             self.assertEqual(reopened.session(sid).starting_isk, 1000)
             reopened.log_abyss_run(sid, 1000, 1050, 10)
             self.assertEqual(len(reopened.runs(sid)), 1)
+            reopened.close()
 
 
 class ImportTest(unittest.TestCase):
