@@ -6,3 +6,6 @@ dist/
 *.spec
 .venv/
 !EveProfitManager/AbyssTracker.spec
+
+# Claude Code agent worktrees
+.claude/worktrees/
