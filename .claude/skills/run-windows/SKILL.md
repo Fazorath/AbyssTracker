@@ -55,3 +55,11 @@ Active-ship and cargo checks are not part of this skill (see #52).
 ## Report
 
 Lead with the Gmail line if you opened Gmail. Then list pass/fail for each check above, with a short note for any fail. Don't paste screenshots with personal details.
+
+## Notes from the first run
+
+- `request_access` only matches installed apps: ask for "Python 3.11" to drive the Tk window (not "python" or "AbyssTracker"). Don't grant the EVE client; its windows are masked in screenshots, which is what you want.
+- The refresh token may already be in Windows Credential Manager from an earlier sign-in. If Settings shows the character signed in, don't sign in again: restarting the app and fetching the wallet proves the refresh, and Gmail stays closed.
+- The location check can run headless with the app's own code (`Account().client()` plus `location.get_location`); print only `in_abyss`, never the system or token.
+- Pocket-on-top is checked without touching EVE: read the EVE client (`exefile`) and pocket windows with Win32 `GetWindowRect`, `IsIconic` and the `WS_EX_TOPMOST` flag, and move the pocket window over the client with `SetWindowPos` on the pocket's own handle. An EVE window that reads as minimized (rect -32000) means the user must restore it.
+- The wallet check compares against the figure the user reads in the client; ESI caches it about two minutes, so expect rounding or small drift.
