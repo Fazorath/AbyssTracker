@@ -313,7 +313,8 @@ class Tracker:
 
     def log_abyss_run(self, session_id, isk_before, isk_after, time_left):
         """
-        Record an abyssal run from wallet amounts and the timer. Only the CLI still logs this way.
+        Record an abyssal run from wallet amounts and the timer, the way runs were logged
+        before cargo runs. Nothing logs new runs this way now; kept for old wallet-based data.
 
         Args:
             session_id (int): Session to add the run to.

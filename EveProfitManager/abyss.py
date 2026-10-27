@@ -16,13 +16,11 @@ def abyssMain(tracker=None):
     tracker = tracker or Tracker()
     print(title)
     weather, tier = askFilament(tracker)
-    startingIsk = startingInven()
-    session_id = tracker.start_session(ABYSS, startingIsk, weather, tier)
+    session_id = tracker.start_session(ABYSS, weather=weather, tier=tier)
     try:
         while True:
-            after_inv = afterInven()
-            run = tracker.log_abyss_run(session_id, startingIsk, after_inv, timeLeft())
-            startingIsk = after_inv
+            before = cargoBefore(tracker.latest_cargo_after(session_id))
+            run = tracker.log_cargo_run(session_id, before, cargoAfter(), timeLeft())
             printRun(run)
 
             while True:
@@ -31,7 +29,6 @@ def abyssMain(tracker=None):
 
                 if user_input == "1":
                     print(title)
-                    print(f"\n{Fore.GREEN}Last Total: {Fore.RED}{startingIsk} Million\n")
                     break  # Exit the inner loop to continue tracking another Abyssal run
                 elif user_input == "0":
                     tracker.end_session(session_id)
@@ -61,7 +58,7 @@ def printRun(run):
     """
     print(
         f"\n{Fore.GREEN}Profit: {Fore.RED}{run.profit} Million"
-        f"\n{Fore.GREEN}New total: {Fore.RED}{run.isk_after}"
+        f"\n{Fore.GREEN}Cargo after: {Fore.RED}{run.cargo_after} Million"
         f"\n{Fore.GREEN}Time inside Abyss: {Fore.RED}{run.minutes} Mins"
         f"\n{Fore.GREEN}ISK per Hour: {Fore.RED}{isk_per_hour(run.profit, run.minutes):.1f} Million\n"
     )
@@ -85,24 +82,28 @@ def askFilament(tracker):
     return WEATHERS[weather_index], tier
 
 
-def startingInven():
+def cargoBefore(default):
     """
-    Get the ISK total before an Abyssal run.
+    Get the cargo value going into an Abyssal run.
+
+    Args:
+        default (float | None): Last run's cargo after, taken on Enter. None on a session's first run.
 
     Returns:
-        float: ISK total before Abyssal run.
+        float: Cargo value before the run, in millions.
     """
-    return askNumber("\nIsk Total before Abyss")
+    print()
+    return askNumber("Cargo before", minimum=0, default=default)
 
 
-def afterInven():
+def cargoAfter():
     """
-    Get the ISK total after an Abyssal run.
+    Get the cargo value coming out of an Abyssal run.
 
     Returns:
-        float: ISK total after Abyssal run.
+        float: Cargo value after the run, in millions.
     """
-    return askNumber("Isk Total after Abyss")
+    return askNumber("Cargo after", minimum=0)
 
 
 def timeLeft():

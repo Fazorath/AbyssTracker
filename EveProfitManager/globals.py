@@ -9,7 +9,7 @@ def clear():
     os.system("cls" if os.name == "nt" else "clear")
 
 
-def askNumber(prompt, minimum=None, maximum=None):
+def askNumber(prompt, minimum=None, maximum=None, default=None):
     """
     Keep asking until the user enters a valid number.
 
@@ -17,13 +17,18 @@ def askNumber(prompt, minimum=None, maximum=None):
         prompt (str): Text shown before the input.
         minimum (float, optional): Lowest accepted value.
         maximum (float, optional): Highest accepted value.
+        default (float, optional): Value returned when the user just presses Enter.
 
     Returns:
         float: The number entered.
     """
+    hint = f" [{default:.15g}]" if default is not None else ""
     while True:
+        answer = input(f"{Fore.GREEN}{prompt}{hint}: {Fore.RED}").strip()
+        if not answer and default is not None:
+            return default
         try:
-            value = float(input(f"{Fore.GREEN}{prompt}: {Fore.RED}"))
+            value = float(answer)
         except ValueError:
             value = math.nan
         if not math.isfinite(value):
