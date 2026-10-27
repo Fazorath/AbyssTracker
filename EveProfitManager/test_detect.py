@@ -2,6 +2,7 @@ import os
 import tempfile
 import tkinter
 import unittest
+from unittest import mock
 
 from core import ABYSS, Tracker
 from theme import load_fonts
@@ -24,7 +25,7 @@ class AbyssDetectionTest(unittest.TestCase):
         self.addCleanup(folder.cleanup)
         self.tracker = Tracker(os.path.join(folder.name, "tracker.db"))
         self.addCleanup(self.tracker.close)
-        self.tracker.start_session(ABYSS, starting_isk=1000, weather="Gamma", tier=2)
+        self.tracker.start_session(ABYSS, weather="Gamma", tier=2)
         self.app = gui.App(self.tracker)
         self.addCleanup(self.app.destroy)
         self.app.update()
@@ -41,17 +42,21 @@ class AbyssDetectionTest(unittest.TestCase):
         self.page.see_abyss(False)
         self.page.see_abyss(True)
         self.page.timer.elapsed_before = 7 * 60  # pretend 7 minutes passed
-        self.page.see_abyss(False)
+        with mock.patch.object(self.page.cargo_after, "focus_set") as focus:
+            self.page.see_abyss(False)
+        focus.assert_called_once()
         self.assertFalse(self.page.timer.running)
         self.assertIn("13:00", self.page.message.cget("text"))
         self.assertIn("log", self.page.message.cget("text").lower())
+        self.assertIn("cargo after", self.page.message.cget("text").lower())
 
     def test_the_paused_timer_time_is_what_gets_logged(self):
         self.page.see_abyss(False)
         self.page.see_abyss(True)
         self.page.timer.elapsed_before = 8 * 60
         self.page.see_abyss(False)
-        self.page.after_isk.insert(0, "1,044.5")
+        self.page.cargo_before.insert(0, "100")
+        self.page.cargo_after.insert(0, "144.5")
         self.page.log()
         run = self.tracker.runs(self.page.session_id)[0]
         self.assertEqual(run.minutes, 8)

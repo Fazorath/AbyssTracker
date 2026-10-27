@@ -40,7 +40,9 @@ CREATE TABLE IF NOT EXISTS runs (
     profit REAL NOT NULL,
     minutes REAL NOT NULL,
     isk_after REAL,
-    count INTEGER NOT NULL DEFAULT 1
+    count INTEGER NOT NULL DEFAULT 1,
+    cargo_before REAL,
+    cargo_after REAL
 );
 CREATE TABLE IF NOT EXISTS payouts (
     journal_id INTEGER PRIMARY KEY
@@ -108,8 +110,10 @@ class Run:
     recorded_at: datetime
     profit: float
     minutes: float
-    isk_after: float | None
+    isk_after: float | None  # wallet after an old wallet-based run
     count: int
+    cargo_before: float | None = None  # set, with cargo_after, on a cargo run
+    cargo_after: float | None = None
 
 
 @dataclass
@@ -183,6 +187,10 @@ class Tracker:
         for column, type_ in (("import_key", "TEXT"), ("weather", "TEXT"), ("tier", "INTEGER")):
             if column not in columns:
                 self.db.execute(f"ALTER TABLE sessions ADD COLUMN {column} {type_}")
+        columns = [r["name"] for r in self.db.execute("PRAGMA table_info(runs)")]
+        for column in ("cargo_before", "cargo_after"):  # added, never back-filled (ADR 0001)
+            if column not in columns:
+                self.db.execute(f"ALTER TABLE runs ADD COLUMN {column} REAL")
 
     def close(self):
         self.db.close()
@@ -195,7 +203,8 @@ class Tracker:
 
         Args:
             kind (str): ABYSS or INCURSION.
-            starting_isk (float, optional): Wallet before the first abyssal run.
+            starting_isk (float, optional): Wallet before the first run, kept for old
+                wallet-based sessions. New abyss sessions start without one.
             weather (str, optional): Abyssal weather from WEATHERS.
             tier (int, optional): Filament tier, 0 (Tranquil) to 6 (Cataclysmic).
 
@@ -263,9 +272,48 @@ class Tracker:
 
     # --- runs -----------------------------------------------------------
 
+    def log_cargo_run(self, session_id, cargo_before, cargo_after, time_left):
+        """
+        Record an abyssal run from the cargo value before and after it, and the timer.
+
+        Profit is cargo after minus cargo before, so it can be negative (lost cargo).
+
+        Args:
+            session_id (int): Session to add the run to.
+            cargo_before (float): Cargo value going in.
+            cargo_after (float): Cargo value coming out.
+            time_left (float): Minutes left on the abyssal timer when leaving.
+
+        Returns:
+            Run: The recorded run.
+        """
+        _require_finite(cargo_before, cargo_after)
+        _require_time_left(time_left)
+        with self.db:
+            cur = self.db.execute(
+                "INSERT INTO runs (session_id, recorded_at, profit, minutes, cargo_before, cargo_after) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (session_id, _now(), cargo_after - cargo_before, MAXTIME - time_left, cargo_before, cargo_after),
+            )
+        return self.run(cur.lastrowid)
+
+    def latest_cargo_after(self, session_id):
+        """
+        Cargo after of the session's latest cargo run, to prefill the next run's cargo before.
+
+        Returns:
+            float | None: None for a session with no cargo runs (new, or wallet runs only).
+        """
+        row = self.db.execute(
+            "SELECT cargo_after FROM runs WHERE session_id = ? AND cargo_after IS NOT NULL "
+            "ORDER BY id DESC LIMIT 1",
+            (session_id,),
+        ).fetchone()
+        return row["cargo_after"] if row else None
+
     def log_abyss_run(self, session_id, isk_before, isk_after, time_left):
         """
-        Record an abyssal run from wallet amounts and the timer.
+        Record an abyssal run from wallet amounts and the timer. Only the CLI still logs this way.
 
         Args:
             session_id (int): Session to add the run to.
@@ -731,4 +779,6 @@ def _run(row):
         minutes=row["minutes"],
         isk_after=row["isk_after"],
         count=row["count"],
+        cargo_before=row["cargo_before"],
+        cargo_after=row["cargo_after"],
     )

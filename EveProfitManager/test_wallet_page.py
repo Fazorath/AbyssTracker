@@ -39,7 +39,7 @@ class AbyssWalletStatTest(unittest.TestCase):
         self.addCleanup(folder.cleanup)
         self.tracker = Tracker(os.path.join(folder.name, "tracker.db"))
         self.addCleanup(self.tracker.close)
-        self.tracker.start_session(ABYSS, starting_isk=1000, weather="Gamma", tier=2)
+        self.tracker.start_session(ABYSS, weather="Gamma", tier=2)
         sync = mock.patch.object(gui.App, "run_async", lambda _app, work, done: self.finish(work, done))
         sync.start()  # read on the spot, not on a thread
         self.addCleanup(sync.stop)
@@ -74,7 +74,8 @@ class AbyssWalletStatTest(unittest.TestCase):
     def test_reads_again_after_each_logged_run(self):
         self.page.resume()
         self.wallet.return_value = Wallet(millions=1300.0, fetched_at=READ_AT)
-        self.page.after_isk.insert(0, "1,050")
+        self.page.cargo_before.insert(0, "100")
+        self.page.cargo_after.insert(0, "150")
         self.page.time_left.insert(0, "10")
         self.page.log()
         self.assertEqual(self.wallet.call_count, 2)
@@ -83,7 +84,6 @@ class AbyssWalletStatTest(unittest.TestCase):
     def test_reads_when_a_session_starts(self):
         self.tracker.end_session(self.page.session_id)
         self.page.resume()
-        self.page.start_isk.insert(0, "1,000")
         self.page.start_session()
         self.assertEqual(self.wallet.call_count, 1)
         self.assertEqual(self.shown()[1], "from EVE at 18:40")
@@ -100,7 +100,8 @@ class AbyssWalletStatTest(unittest.TestCase):
         self.wallet.side_effect = ValueError("ESI returned 403")
         self.page.resume()
         self.assertIn("403", self.shown()[1])
-        self.page.after_isk.insert(0, "1,050")
+        self.page.cargo_before.insert(0, "100")
+        self.page.cargo_after.insert(0, "150")
         self.page.time_left.insert(0, "10")
         self.page.log()
         self.assertEqual(len(self.tracker.runs(self.page.session_id)), 1)

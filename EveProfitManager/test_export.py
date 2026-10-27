@@ -133,6 +133,8 @@ class BackupTest(unittest.TestCase):
         self.tracker.restore(old)
         self.assertEqual(self.tracker.totals().profit, 10)
         self.assertIsNone(self.tracker.session(1).weather)
+        self.assertIsNone(self.tracker.runs(1)[0].cargo_after)
+        self.tracker.log_cargo_run(1, 0, 5, time_left=10)
         self.tracker.start_session(ABYSS, starting_isk=1, weather="Dark", tier=1)
 
     def test_restore_refuses_files_that_are_not_trackers(self):
