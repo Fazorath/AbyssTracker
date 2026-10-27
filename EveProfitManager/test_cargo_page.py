@@ -102,6 +102,45 @@ class AbyssCargoFormTest(unittest.TestCase):
         self.type_run("0", "40", "10")
         self.assertEqual([r.profit for r in self.tracker.runs(sid)], [30, 40])
 
+    def open_edit(self, run):
+        self.page.edit_run(run.id)
+        self.app.update()
+        (dialog,) = [w for w in self.page.winfo_children() if isinstance(w, self.gui.EditRunDialog)]
+        return dialog
+
+    def test_editing_a_cargo_run_shows_its_cargo_prefilled_and_saving_updates_the_session(self):
+        sid = self.tracker.start_session(ABYSS, weather="Gamma", tier=2)
+        first = self.tracker.log_cargo_run(sid, 100, 1310, time_left=5)  # meant 131
+        last = self.tracker.log_cargo_run(sid, 1310, 1400, time_left=6)
+        page = self.open_app()
+        dialog = self.open_edit(first)
+        self.assertEqual(self.texts(dialog)[:3], ["Cargo before (M)", "Cargo after (M)", "Time left (min)"])
+        self.assertEqual([e.get() for e in dialog.entries], ["100", "1310", "5"])
+        self.gui.set_entry(dialog.entries[1], "131")
+        dialog.save()
+        self.app.update()
+        edited = self.tracker.run(first.id)
+        self.assertEqual((edited.cargo_after, edited.profit), (131, 31))
+        self.assertEqual(self.tracker.run(last.id), last)
+        self.assertEqual(page.stats["profit"].value.cget("text"), self.gui.signed_isk(31 + 90))
+
+    def test_a_bad_cargo_edit_keeps_the_dialog_open_and_changes_nothing(self):
+        sid = self.tracker.start_session(ABYSS, weather="Gamma", tier=2)
+        run = self.tracker.log_cargo_run(sid, 100, 131, time_left=5)
+        self.open_app()
+        dialog = self.open_edit(run)
+        self.gui.set_entry(dialog.entries[2], "25")
+        dialog.save()
+        self.assertIn("between 0 and 20", dialog.message.cget("text"))
+        self.assertEqual(self.tracker.run(run.id), run)
+
+    def test_an_old_wallet_run_keeps_the_wallet_edit_dialog(self):
+        sid = self.tracker.start_session(ABYSS, starting_isk=1000, weather="Gamma", tier=2)
+        run = self.tracker.log_abyss_run(sid, 1000, 1030, time_left=10)
+        self.open_app()
+        dialog = self.open_edit(run)
+        self.assertEqual(self.texts(dialog)[:2], ["Wallet after run (M)", "Time left (min)"])
+
     def test_settings_copy_no_longer_asks_for_the_wallet_for_abyssal_runs(self):
         self.open_app()
         copy = " ".join(self.texts(self.app.pages["settings"]))

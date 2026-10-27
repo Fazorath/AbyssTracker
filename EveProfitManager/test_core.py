@@ -166,6 +166,42 @@ class TrackerTest(unittest.TestCase):
         self.assertEqual(self.tracker.run(run.id), run)
         self.assertEqual(self.tracker.run(site.id), site)
 
+    def test_editing_a_cargo_run_recomputes_its_profit_and_minutes(self):
+        sid = self.tracker.start_session(ABYSS)
+        typo = self.tracker.log_cargo_run(sid, 100, 1310, time_left=5)  # meant 131
+        edited = self.tracker.edit_cargo_run(typo.id, 90, 131, time_left=8)
+        self.assertEqual((edited.cargo_before, edited.cargo_after, edited.isk_after), (90, 131, None))
+        self.assertEqual((edited.profit, edited.minutes), (41, 12))
+        self.assertEqual(self.tracker.session(sid).profit, 41)
+
+    def test_editing_a_cargo_run_leaves_the_runs_around_it_alone(self):
+        sid = self.tracker.start_session(ABYSS, starting_isk=1000)
+        wallet = self.tracker.log_abyss_run(sid, 1000, 1030, time_left=10)
+        first = self.tracker.log_cargo_run(sid, 50, 90, time_left=12)
+        middle = self.tracker.log_cargo_run(sid, 90, 900, time_left=6)
+        last = self.tracker.log_cargo_run(sid, 900, 120, time_left=5)
+        self.tracker.edit_cargo_run(middle.id, 90, 100, time_left=6)
+        for run in (wallet, first, last):
+            self.assertEqual(self.tracker.run(run.id), run)
+        self.assertEqual(self.tracker.latest_cargo_after(sid), 120)
+
+    def test_bad_cargo_edits_are_rejected_like_logging(self):
+        sid = self.tracker.start_session(ABYSS, starting_isk=1000)
+        run = self.tracker.log_cargo_run(sid, 100, 131, time_left=5)
+        wallet = self.tracker.log_abyss_run(sid, 1000, 1030, time_left=10)
+        site = self.tracker.log_incursion_site(self.tracker.start_session(INCURSION), 31, 10)
+        inf, nan = float("inf"), float("nan")
+        for run_id, before, after, left, error in (
+            (run.id, inf, 131, 5, "real numbers"), (run.id, 100, nan, 5, "real numbers"),
+            (run.id, 100, "131", 5, "real numbers"), (run.id, 100, 131, nan, "real numbers"),
+            (run.id, 100, 131, 25, "between 0 and 20"), (run.id, 100, 131, -1, "between 0 and 20"),
+            (wallet.id, 1000, 1030, 5, "cargo"), (site.id, 0, 31, 5, "cargo"), (999, 0, 31, 5, "cargo"),
+        ):
+            with self.assertRaisesRegex(ValueError, error):
+                self.tracker.edit_cargo_run(run_id, before, after, left)
+        for unchanged in (run, wallet, site):
+            self.assertEqual(self.tracker.run(unchanged.id), unchanged)
+
     def test_editing_incursion_site(self):
         sid = self.tracker.start_session(INCURSION)
         self.tracker.log_incursion_site(sid, 31, 10)

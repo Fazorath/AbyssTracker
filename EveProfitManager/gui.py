@@ -1039,11 +1039,21 @@ class AbyssPage(SessionPage):
         self.read_wallet()
 
     def edit_fields(self, run):
-        return [("Wallet after run (M)", f"{run.isk_after:g}"), ("Time left (min)", f"{MAXTIME - run.minutes:g}")]
+        left = ("Time left (min)", f"{MAXTIME - run.minutes:g}")
+        if run.cargo_after is None:  # an old wallet run
+            return [("Wallet after run (M)", f"{run.isk_after:g}"), left]
+        return [("Cargo before (M)", f"{run.cargo_before:g}"), ("Cargo after (M)", f"{run.cargo_after:g}"), left]
 
-    def save_edit(self, run, isk_after, time_left):
-        return self.tracker.edit_abyss_run(
-            run.id, parse_isk(isk_after, "wallet after"), parse_minutes(time_left, "time left")
+    def save_edit(self, run, *values):
+        if run.cargo_after is None:
+            isk_after, time_left = values
+            return self.tracker.edit_abyss_run(
+                run.id, parse_isk(isk_after, "wallet after"), parse_minutes(time_left, "time left")
+            )
+        before, after, time_left = values
+        return self.tracker.edit_cargo_run(
+            run.id, parse_isk(before, "cargo before"), parse_isk(after, "cargo after"),
+            parse_minutes(time_left, "time left"),
         )
 
     def update_stats(self, session, runs):

@@ -443,6 +443,32 @@ class Tracker:
                 )
         return self.run(run_id)
 
+    def edit_cargo_run(self, run_id, cargo_before, cargo_after, time_left):
+        """
+        Correct a cargo run's cargo values or timer. Its profit stands on its own
+        cargo values, so no other run changes.
+
+        Args:
+            run_id (int): Cargo run to change.
+            cargo_before (float): Corrected cargo value going in.
+            cargo_after (float): Corrected cargo value coming out.
+            time_left (float): Corrected minutes left on the abyssal timer.
+
+        Returns:
+            Run: The updated run.
+        """
+        _require_finite(cargo_before, cargo_after)
+        _require_time_left(time_left)
+        run = self.run(run_id)
+        if run is None or run.cargo_after is None:
+            raise ValueError("Only cargo runs have cargo values to correct")
+        with self.db:
+            self.db.execute(
+                "UPDATE runs SET profit = ?, minutes = ?, cargo_before = ?, cargo_after = ? WHERE id = ?",
+                (cargo_after - cargo_before, MAXTIME - time_left, cargo_before, cargo_after, run_id),
+            )
+        return self.run(run_id)
+
     def edit_incursion_site(self, run_id, profit, minutes):
         """Correct an incursion site's payout or time."""
         _require_finite(profit)
@@ -567,7 +593,8 @@ class Tracker:
         rows = self.db.execute(
             "SELECT s.id AS session_id, s.kind, s.started_at, s.ended_at, s.weather, s.tier, s.imported, "
             "r.id AS run_id, r.recorded_at, r.profit AS profit_millions, r.minutes, "
-            "r.isk_after AS isk_after_millions, r.count AS runs "
+            "r.isk_after AS isk_after_millions, r.count AS runs, "
+            "r.cargo_before AS cargo_before_millions, r.cargo_after AS cargo_after_millions "
             f"FROM sessions s LEFT JOIN runs r ON r.session_id = s.id {where} ORDER BY s.started_at, s.id, r.id",
             args,
         ).fetchall()
@@ -723,6 +750,7 @@ def _now():
 _CSV_COLUMNS = (
     "session_id", "kind", "started_at", "ended_at", "weather", "tier", "imported",
     "run_id", "recorded_at", "profit_millions", "minutes", "isk_after_millions", "runs",
+    "cargo_before_millions", "cargo_after_millions",  # last, so older columns keep their place
 )
 
 _SESSION_QUERY = (
