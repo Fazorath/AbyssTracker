@@ -31,6 +31,7 @@ from core import (
 from clock import read_clock
 from journal import get_incursion_payouts
 from location import AbyssWatcher, get_location
+from cargo import get_cargo
 from wallet import get_wallet
 from account import SIGN_IN_ERRORS, Account
 from theme import NEUTRAL_THEME, asset_path, load_fonts, theme_for, ui_family
@@ -929,6 +930,42 @@ class AbyssPage(SessionPage):
         self.cargo_before = self.field(frame, 0, "Cargo before (M)", 150, "e.g. 120")
         self.cargo_after = self.field(frame, 1, "Cargo after (M)", 150, "e.g. 164.5")
         self.time_left = self.field(frame, 2, "Time left (min)", 120, "blank = timer")
+        self.fetch_buttons = {}
+        for column, which in enumerate(("before", "after")):
+            button = self.paint(
+                ctk.CTkButton(frame, text="Fetch from EVE", width=150, height=28, font=font(12),
+                              border_width=1, command=lambda w=which: self.fetch_cargo(w)),
+                fg_color=lambda _t: "transparent", border_color="line", hover_color="line", text_color="soft",
+            )
+            button.grid(row=2, column=column, sticky="w", padx=(0, 12), pady=(6, 0))
+            self.fetch_buttons[which] = button
+            note = self.paint(ctk.CTkLabel(frame, text="", font=font(11), wraplength=150, justify="left"),
+                              text_color="soft")
+            note.grid(row=3, column=column, sticky="nw", padx=(0, 12))
+            setattr(self, f"cargo_{which}_note", note)
+
+    def say_cargo_note(self, which, text, problem=False):
+        note = getattr(self, f"cargo_{which}_note")
+        note.configure(text=text, text_color=CRITICAL_TEXT if problem else self.theme.soft)
+
+    def fetch_cargo(self, which):
+        """Fill Cargo before or after with the active ship's cargo value from ESI, off the UI thread."""
+        client, why = self.signed_in_client()
+        if client is None:
+            self.say_cargo_note(which, why, problem=True)
+            return
+        self.say_cargo_note(which, "reading cargo...")
+
+        def done(cargo, error):
+            if error is not None:
+                self.say_cargo_note(which, str(error), problem=True)
+                return
+            set_entry(getattr(self, f"cargo_{which}"), f"{cargo.millions:.2f}")
+            stamp = f"From EVE at {datetime.fromtimestamp(cargo.fetched_at):%H:%M}"
+            unpriced = f" · {cargo.unpriced} unpriced" if cargo.unpriced else ""
+            self.say_cargo_note(which, f"{stamp}{unpriced}. ESI can lag up to an hour; edit if it's off.")
+
+        self.app.run_async(lambda: get_cargo(client, client.character.id), done)
 
     def reset_watcher(self):
         """Detection switched on: the next reading is a fresh baseline."""
@@ -995,6 +1032,8 @@ class AbyssPage(SessionPage):
 
     def after_log(self):
         self.prefill_cargo_before()
+        for which in ("before", "after"):
+            self.say_cargo_note(which, "")
         self.cargo_after.delete(0, "end")
         self.time_left.delete(0, "end")
         self.read_wallet()
@@ -2047,7 +2086,7 @@ class App(ctk.CTk):
             self.iconbitmap(asset_path("icon.ico"))
         else:
             # Keep a reference: Tk drops the image once Python garbage-collects it
-            self.icon = tk.PhotoImage(file=asset_path("icon.png"))
+            self.icon = tk.PhotoImage(master=self, file=asset_path("icon.png"))
             self.iconphoto(True, self.icon)
 
     def bring_to_front(self):
