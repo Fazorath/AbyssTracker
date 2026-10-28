@@ -34,8 +34,8 @@ A desktop tracker for EVE Online pilots who run abyssal deadspace and incursions
   - **History page:** net profit, ISK/hour and winning sessions, a profit-per-session chart with hover details,
     ISK/hour for each weather (and the best one), and every past session with its weather and tier,
     filterable by Abyss/Incursion. Old `Sessions.txt` files can be imported, the current filter can be exported to CSV, and `tracker.db` can be backed up and restored with a click.
-  - **Pocket mode:** a small always-on-top window to keep beside the EVE client, with the timer, the cargo fields (or
-    payout) field and Log button, the session's profit, ISK/hour and runs, and the last three runs. It shares the
+  - **Pocket mode:** a small always-on-top window to keep beside the EVE client, with the timer, the cargo fields (or the
+    payout field) and Log button, the session's profit, ISK/hour and runs, and the last three runs. It shares the
     timer and session with the full window; **Unpin** lets other windows cover it and **Expand** brings the full
     window back.
   - **Run detection:** when signed in, switch on **Detect runs from EVE** in the session toolbar. The app polls your
