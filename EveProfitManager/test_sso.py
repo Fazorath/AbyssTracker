@@ -4,7 +4,10 @@ import unittest
 import jwt
 from cryptography.hazmat.primitives.asymmetric import rsa
 
-from sso import InvalidToken, validate_token
+import os
+from unittest import mock
+
+from sso import DEFAULT_CLIENT_ID, InvalidToken, _client_id, validate_token
 
 CLIENT_ID = "my-client-id"
 KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
@@ -51,6 +54,21 @@ class ValidateTokenTests(unittest.TestCase):
             with self.subTest(label):
                 with self.assertRaises(InvalidToken):
                     validate(token)
+
+
+class ClientIdTests(unittest.TestCase):
+    def test_default_when_unset(self):
+        with mock.patch.dict(os.environ, clear=False):
+            os.environ.pop("EVE_CLIENT_ID", None)
+            self.assertEqual(_client_id(), DEFAULT_CLIENT_ID)
+
+    def test_default_when_empty(self):
+        with mock.patch.dict(os.environ, {"EVE_CLIENT_ID": ""}):
+            self.assertEqual(_client_id(), DEFAULT_CLIENT_ID)
+
+    def test_env_overrides_default(self):
+        with mock.patch.dict(os.environ, {"EVE_CLIENT_ID": "mine"}):
+            self.assertEqual(_client_id(), "mine")
 
 
 if __name__ == "__main__":
