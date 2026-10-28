@@ -26,7 +26,7 @@ Log in through the EVE launcher, dock the character, and set EVE to windowed or 
 
 ## Launch
 
-Needs `EVE_CLIENT_ID` (the app's client ID from developers.eveonline.com; callback `http://127.0.0.1:8765/callback`) set in the user's environment. If it's missing, stop and ask; don't hunt for it in files.
+`EVE_CLIENT_ID` is optional: the app ships a built-in client ID (callback `http://127.0.0.1:8765/callback`). Set the variable only to override it with another registered app's client ID.
 
 ```powershell
 git clone https://github.com/Fazorath/AbyssTracker.git $env:TEMP\abyss-rig   # or git pull in an existing clone

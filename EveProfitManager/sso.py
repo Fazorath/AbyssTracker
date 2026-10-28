@@ -39,6 +39,9 @@ class SignInError(Exception):
     pass
 
 
+DEFAULT_CLIENT_ID = "28c1d7859b4e49f6bb97a13441e8be7c"
+
+
 @dataclass
 class Character:
     id: int
@@ -46,13 +49,8 @@ class Character:
 
 
 def _client_id():
-    client_id = os.environ.get("EVE_CLIENT_ID")
-    if not client_id:
-        raise SignInError(
-            "Set the EVE_CLIENT_ID environment variable to your app's client ID "
-            "(register at https://developers.eveonline.com/applications)."
-        )
-    return client_id
+    # PKCE with no client secret: the client ID is public, so it ships as the default.
+    return os.environ.get("EVE_CLIENT_ID") or DEFAULT_CLIENT_ID
 
 
 def _port():
