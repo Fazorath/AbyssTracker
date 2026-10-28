@@ -72,16 +72,16 @@ class TrackerTest(unittest.TestCase):
 
     def test_latest_cargo_after_skips_wallet_runs_and_other_sessions(self):
         old = self.tracker.start_session(ABYSS, starting_isk=1000)
-        self.tracker.log_abyss_run(old, 1000, 1030, time_left=10)
+        self.tracker._add_run(old, 30, 10, 1030)
         self.assertIsNone(self.tracker.latest_cargo_after(old))  # wallet runs only
         self.tracker.log_cargo_run(old, 10, 70, time_left=10)
-        self.tracker.log_abyss_run(old, 1030, 1040, time_left=10)  # a wallet run after it
+        self.tracker._add_run(old, 10, 10, 1040)  # a wallet run after it
         self.assertEqual(self.tracker.latest_cargo_after(old), 70)
         self.assertIsNone(self.tracker.latest_cargo_after(self.tracker.start_session(ABYSS)))
 
     def test_a_session_open_across_the_update_mixes_wallet_and_cargo_runs(self):
         sid = self.tracker.start_session(ABYSS, starting_isk=1000, weather="Dark", tier=3)
-        self.tracker.log_abyss_run(sid, 1000, 1030, time_left=10)  # logged before the update
+        self.tracker._add_run(sid, 30, 10, 1030)  # logged before the update
         self.assertIsNone(self.tracker.latest_cargo_after(sid))  # its first cargo before is empty
         self.tracker.log_cargo_run(sid, 50, 90, time_left=12)
         self.tracker.log_cargo_run(sid, 90, 80, time_left=5)
@@ -96,15 +96,10 @@ class TrackerTest(unittest.TestCase):
     def test_sessions_do_not_leak_profit(self):
         for _ in range(2):
             sid = self.tracker.start_session(ABYSS, starting_isk=100)
-            self.tracker.log_abyss_run(sid, 100, 130, time_left=0)
+            self.tracker._add_run(sid, 30, 20, 130)
             self.tracker.end_session(sid)
             self.assertEqual(self.tracker.session(sid).profit, 30)
         self.assertEqual(self.tracker.totals().profit, 60)
-
-    def test_time_left_is_validated(self):
-        sid = self.tracker.start_session(ABYSS, starting_isk=100)
-        with self.assertRaises(ValueError):
-            self.tracker.log_abyss_run(sid, 100, 120, time_left=25)
 
     def test_active_session_and_empty_end(self):
         sid = self.tracker.start_session(INCURSION)
@@ -129,42 +124,42 @@ class TrackerTest(unittest.TestCase):
         self.tracker.delete_run(run.id)
         self.assertEqual(self.tracker.session(sid).runs, 0)
 
-    def test_deleting_middle_abyss_run_keeps_wallet_gain(self):
+    def test_deleting_a_wallet_or_cargo_run_leaves_the_other_runs_alone(self):
         sid = self.tracker.start_session(ABYSS, starting_isk=1000)
-        self.tracker.log_abyss_run(sid, 1000, 1030, time_left=10)
-        middle = self.tracker.log_abyss_run(sid, 1030, 1060, time_left=10)
-        self.tracker.log_abyss_run(sid, 1060, 1100, time_left=10)
+        first = self.tracker._add_run(sid, 30, 10, 1030)
+        middle = self.tracker._add_run(sid, 30, 10, 1060)
+        last = self.tracker._add_run(sid, 40, 10, 1100)
+        cargo = self.tracker.log_cargo_run(sid, 10, 25, time_left=5)
         self.tracker.delete_run(middle.id)
-        session = self.tracker.session(sid)
-        self.assertEqual((session.runs, session.profit), (2, 100))
-        self.assertEqual(self.tracker.current_isk(sid), 1100)
+        self.tracker.delete_run(cargo.id)
+        self.assertEqual(self.tracker.runs(sid), [first, last])
+        self.assertEqual(self.tracker.session(sid).profit, 70)
 
-    def test_editing_abyss_run_wallet_rebases_next_run(self):
+    def test_editing_a_wallet_run_changes_only_its_profit_and_minutes(self):
         sid = self.tracker.start_session(ABYSS, starting_isk=1000)
-        self.tracker.log_abyss_run(sid, 1000, 1030, time_left=10)
-        typo = self.tracker.log_abyss_run(sid, 1030, 1600, time_left=10)  # meant 1060
-        last = self.tracker.log_abyss_run(sid, 1600, 1100, time_left=10)
-        edited = self.tracker.edit_abyss_run(typo.id, 1060, time_left=4)
-        self.assertEqual((edited.profit, edited.minutes, edited.isk_after), (30, 16, 1060))
-        self.assertEqual(self.tracker.run(last.id).profit, 40)
+        first = self.tracker._add_run(sid, 30, 10, 1030)
+        typo = self.tracker._add_run(sid, 570, 10, 1600)  # meant 30
+        last = self.tracker._add_run(sid, -500, 10, 1100)
+        edited = self.tracker.edit_wallet_run(typo.id, 30, 16)
+        self.assertEqual((edited.profit, edited.minutes, edited.isk_after), (30, 16, 1600))
+        for run in (first, last):
+            self.assertEqual(self.tracker.run(run.id), run)
         session = self.tracker.session(sid)
-        self.assertEqual((session.runs, session.profit, session.minutes), (3, 100, 36))
-        self.assertEqual(self.tracker.current_isk(sid), 1100)
+        self.assertEqual((session.runs, session.profit, session.minutes), (3, -440, 36))
 
-    def test_bad_abyss_edits_are_rejected(self):
+    def test_bad_wallet_edits_are_rejected(self):
         sid = self.tracker.start_session(ABYSS, starting_isk=1000)
-        run = self.tracker.log_abyss_run(sid, 1000, 1030, time_left=10)
+        run = self.tracker._add_run(sid, 30, 10, 1030)
+        cargo = self.tracker.log_cargo_run(sid, 10, 25, time_left=5)
         site = self.tracker.log_incursion_site(self.tracker.start_session(INCURSION), 31, 10)
-        for run_id, isk_after, time_left in (
-            (run.id, 1030, 25),
-            (run.id, 1030, -1),
-            (run.id, float("nan"), 5),
-            (site.id, 1030, 5),
+        for run_id, profit, minutes in (
+            (run.id, 30, -1), (run.id, float("nan"), 5), (run.id, 30, float("inf")),
+            (cargo.id, 30, 5), (site.id, 30, 5), (999, 30, 5),
         ):
             with self.assertRaises(ValueError):
-                self.tracker.edit_abyss_run(run_id, isk_after, time_left)
-        self.assertEqual(self.tracker.run(run.id), run)
-        self.assertEqual(self.tracker.run(site.id), site)
+                self.tracker.edit_wallet_run(run_id, profit, minutes)
+        for unchanged in (run, cargo, site):
+            self.assertEqual(self.tracker.run(unchanged.id), unchanged)
 
     def test_editing_a_cargo_run_recomputes_its_profit_and_minutes(self):
         sid = self.tracker.start_session(ABYSS)
@@ -176,7 +171,7 @@ class TrackerTest(unittest.TestCase):
 
     def test_editing_a_cargo_run_leaves_the_runs_around_it_alone(self):
         sid = self.tracker.start_session(ABYSS, starting_isk=1000)
-        wallet = self.tracker.log_abyss_run(sid, 1000, 1030, time_left=10)
+        wallet = self.tracker._add_run(sid, 30, 10, 1030)
         first = self.tracker.log_cargo_run(sid, 50, 90, time_left=12)
         middle = self.tracker.log_cargo_run(sid, 90, 900, time_left=6)
         last = self.tracker.log_cargo_run(sid, 900, 120, time_left=5)
@@ -188,7 +183,7 @@ class TrackerTest(unittest.TestCase):
     def test_bad_cargo_edits_are_rejected_like_logging(self):
         sid = self.tracker.start_session(ABYSS, starting_isk=1000)
         run = self.tracker.log_cargo_run(sid, 100, 131, time_left=5)
-        wallet = self.tracker.log_abyss_run(sid, 1000, 1030, time_left=10)
+        wallet = self.tracker._add_run(sid, 30, 10, 1030)
         site = self.tracker.log_incursion_site(self.tracker.start_session(INCURSION), 31, 10)
         inf, nan = float("inf"), float("nan")
         for run_id, before, after, left, error in (
@@ -214,7 +209,7 @@ class TrackerTest(unittest.TestCase):
     def test_bad_incursion_edits_are_rejected(self):
         site = self.tracker.log_incursion_site(self.tracker.start_session(INCURSION), 31, 10)
         sid = self.tracker.start_session(ABYSS, starting_isk=1000)
-        run = self.tracker.log_abyss_run(sid, 1000, 1030, time_left=10)
+        run = self.tracker._add_run(sid, 30, 10, 1030)
         for run_id, profit, minutes in ((site.id, 31, -1), (site.id, float("inf"), 10), (run.id, 31, 10)):
             with self.assertRaises(ValueError):
                 self.tracker.edit_incursion_site(run_id, profit, minutes)
@@ -226,8 +221,8 @@ class TrackerTest(unittest.TestCase):
         inc = self.tracker.start_session(INCURSION)
         nan, inf = float("nan"), float("inf")
         for call in (
-            lambda: self.tracker.log_abyss_run(abyss, 100, inf, time_left=5),
-            lambda: self.tracker.log_abyss_run(abyss, 100, 120, time_left=nan),
+            lambda: self.tracker.log_cargo_run(abyss, 100, inf, time_left=5),
+            lambda: self.tracker.log_cargo_run(abyss, 100, 120, time_left=nan),
             lambda: self.tracker.log_incursion_site(inc, nan, 10),
             lambda: self.tracker.log_incursion_site(inc, 31, inf),
         ):
@@ -264,7 +259,7 @@ class TrackerTest(unittest.TestCase):
             (None, None, 10, 10),      # before weather was recorded
         ):
             sid = self.tracker.start_session(ABYSS, starting_isk=100, weather=weather, tier=tier)
-            self.tracker.log_abyss_run(sid, 100, 100 + profit, time_left)
+            self.tracker.log_cargo_run(sid, 100, 100 + profit, time_left)
         self.tracker.start_session(ABYSS, starting_isk=100, weather="Dark", tier=1)  # no runs yet
         inc = self.tracker.start_session(INCURSION)
         self.tracker.log_incursion_site(inc, 31, 10)
@@ -280,7 +275,7 @@ class TrackerTest(unittest.TestCase):
         for wallets in ((100, 150, 120), (100, 80, 130), (100, 90)):  # +20, +30 with a losing run, -10
             sid = self.tracker.start_session(ABYSS, starting_isk=wallets[0])
             for before, after in zip(wallets, wallets[1:]):
-                self.tracker.log_abyss_run(sid, before, after, time_left=5)
+                self.tracker.log_cargo_run(sid, before, after, time_left=5)
         inc = self.tracker.start_session(INCURSION)
         self.tracker.log_incursion_site(inc, 0, 10)  # break-even isn't a win
 
@@ -366,7 +361,7 @@ class LootTableTest(unittest.TestCase):
             reopened = Tracker(path)
             self.assertIn("loot", self.tables(reopened.db))
             self.assertEqual(reopened.session(sid).starting_isk, 1000)
-            reopened.log_abyss_run(sid, 1000, 1050, 10)
+            reopened.log_cargo_run(sid, 1000, 1050, 10)
             self.assertEqual(len(reopened.runs(sid)), 1)
             reopened.close()
 

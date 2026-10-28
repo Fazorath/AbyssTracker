@@ -96,7 +96,7 @@ class AbyssCargoFormTest(unittest.TestCase):
 
     def test_resuming_a_wallet_only_session_leaves_cargo_before_empty(self):
         sid = self.tracker.start_session(ABYSS, starting_isk=1000, weather="Gamma", tier=2)
-        self.tracker.log_abyss_run(sid, 1000, 1030, time_left=10)
+        self.tracker._add_run(sid, 30, 10, 1030)
         page = self.open_app()
         self.assertEqual(page.cargo_before.get(), "")
         self.type_run("0", "40", "10")
@@ -134,12 +134,16 @@ class AbyssCargoFormTest(unittest.TestCase):
         self.assertIn("between 0 and 20", dialog.message.cget("text"))
         self.assertEqual(self.tracker.run(run.id), run)
 
-    def test_an_old_wallet_run_keeps_the_wallet_edit_dialog(self):
+    def test_an_old_wallet_run_edits_profit_and_minutes(self):
         sid = self.tracker.start_session(ABYSS, starting_isk=1000, weather="Gamma", tier=2)
-        run = self.tracker.log_abyss_run(sid, 1000, 1030, time_left=10)
+        run = self.tracker._add_run(sid, 30, 10, 1030)
         self.open_app()
         dialog = self.open_edit(run)
-        self.assertEqual(self.texts(dialog)[:2], ["Wallet after run (M)", "Time left (min)"])
+        self.assertEqual(self.texts(dialog)[:2], ["Profit (M)", "Minutes"])
+        self.assertEqual([e.get() for e in dialog.entries], ["30", "10"])
+        self.gui.set_entry(dialog.entries[0], "35")
+        dialog.save()
+        self.assertEqual((self.tracker.run(run.id).profit, self.tracker.run(run.id).isk_after), (35, 1030))
 
     def test_settings_copy_no_longer_asks_for_the_wallet_for_abyssal_runs(self):
         self.open_app()

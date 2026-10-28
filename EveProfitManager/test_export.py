@@ -21,8 +21,8 @@ class ExportTest(unittest.TestCase):
 
     def seed(self):
         a = self.tracker.start_session(ABYSS, starting_isk=1000, weather="Dark", tier=3)
-        self.tracker.log_abyss_run(a, 1000, 1031, time_left=5)
-        self.tracker.log_abyss_run(a, 1031, 1050, time_left=8)
+        self.tracker._add_run(a, 31, 15, 1031)
+        self.tracker._add_run(a, 19, 12, 1050)
         self.tracker.end_session(a)
         i = self.tracker.start_session(INCURSION)
         self.tracker.log_incursion_site(i, 93, 12)
@@ -49,7 +49,7 @@ class ExportTest(unittest.TestCase):
 
     def test_csv_shows_the_cargo_values_of_cargo_runs_and_leaves_them_empty_for_wallet_runs(self):
         sid = self.tracker.start_session(ABYSS, starting_isk=1000, weather="Dark", tier=3)
-        self.tracker.log_abyss_run(sid, 1000, 1030, time_left=10)
+        self.tracker._add_run(sid, 30, 10, 1030)
         self.tracker.log_cargo_run(sid, 50, 92.5, time_left=12)
         out = self.dir / "out.csv"
         self.tracker.export_csv(out)
