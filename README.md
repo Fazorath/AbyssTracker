@@ -1,50 +1,48 @@
 # Abyssal and Incursion Tracker
 
-This program is designed to help users track their profits and time spent during Abyssal runs and Incursions in a massively multiplayer online role-playing game (MMORPG). It provides a user-friendly interface for inputting relevant data and automatically calculates profits based on initial and final ISK amounts and time spent in each activity.
+A desktop tracker for EVE Online pilots who run abyssal deadspace and incursions: profit per run, ISK/hour, an abyss timer, and a small pocket window that sits beside the EVE client.
+
+> Not affiliated with abysstracker.com. This is a local desktop app.
+
+**[Download for Windows or Apple Silicon](https://github.com/Fazorath/AbyssTracker/releases/latest)** (no Python needed)
 
 ![Abyss page with a live session, the abyssal timer and the run log](docs/screenshots/abyss.png)
 
-## Table of Contents
+<!-- GIF: pocket mode beside the client, run detection starting the timer, logging a run. Not recorded yet. -->
 
-- [Abyssal and Incursion Tracker](#abyssal-and-incursion-tracker)
-  - [Table of Contents](#table-of-contents)
-  - [Features](#features)
-  - [Screenshots](#screenshots)
-  - [Getting Started](#getting-started)
-    - [Download](#download)
-    - [Prerequisites](#prerequisites)
-    - [Installation](#installation)
-  - [Usage](#usage)
-  - [Contributing](#contributing)
-- [Todo:](#todo)
-- [4/5/24 TextFile Functionality](#4524-textfile-functionality)
-- [4/10/24](#4102024)
-- [4/18/24](#4182024)
-- [4/21/24](#42124)
-- [10/23/26](#102326)
+## Contents
+
+- [Features](#features)
+- [What it reads from your character](#what-it-reads-from-your-character)
+- [How profit works](#how-profit-works)
+- [Known limits](#known-limits)
+- [Screenshots](#screenshots)
+- [Getting started](#getting-started)
+- [Usage](#usage)
+- [Contributing](#contributing)
+- [License](#license)
 
 ## Features
 
 **Desktop app (`gui.py`):**
-  - **Session page:** enter your wallet and pick the filament's weather and tier, then log each run with the new
-    wallet total and the time left on the 20-minute timer. The large abyssal countdown can fill in the time for you
+  - **Session page:** pick the filament's weather and tier, then log each run with its cargo value before and after and the time left on the 20-minute timer. The large abyssal countdown can fill in the time for you
     (leave the field blank). The page takes the colours of the session's weather and shows its tactical hint.
   - **Incursion page:** set the payout per site (remembered between sessions) and log each site's time, typed or
     from the built-in stopwatch.
   - Each run shows as a tile with its profit, duration and **ISK/hour**, where you can fix (✎) or delete mistakes,
-    with the session's profit, ISK/hour, time and wallet below.
+    with the session's profit, ISK/hour, time below.
   - **History page:** net profit, ISK/hour and winning sessions, a profit-per-session chart with hover details,
     ISK/hour for each weather (and the best one), and every past session with its weather and tier,
     filterable by Abyss/Incursion. Old `Sessions.txt` files can be imported, the current filter can be exported to CSV, and `tracker.db` can be backed up and restored with a click.
-  - **Pocket mode:** a small always-on-top window to keep beside the EVE client, with the timer, the wallet (or
-    payout) field and Log button, the session's profit, ISK/hour and runs, and the last three runs. It shares the
+  - **Pocket mode:** a small always-on-top window to keep beside the EVE client, with the timer, the cargo fields (or the
+    payout field) and Log button, the session's profit, ISK/hour and runs, and the last three runs. It shares the
     timer and session with the full window; **Unpin** lets other windows cover it and **Expand** brings the full
     window back.
   - **Sign-in:** works out of the box with the app's built-in EVE client ID (public, PKCE, no secret). Set the
     `EVE_CLIENT_ID` environment variable only to override it with your own registered application.
   - **Run detection:** when signed in, switch on **Detect runs from EVE** in the session toolbar. The app polls your
     character's location (ESI caches it for 5 seconds), starts the timer when you enter Abyssal Deadspace, and on
-    exit pauses it and prompts you to enter your wallet and log the run.
+    exit pauses it and prompts you to log the run.
   - **Incursion payouts:** when signed in, switch on **Log payouts from EVE** on the Incursion page. Each incursion
     payout in your wallet journal (a *Corporate Reward Payout*) is logged as a site with the amount actually paid,
     timed from the previous site, or from the session start for the first. ESI caches the journal for an hour, so
@@ -59,6 +57,35 @@ This program is designed to help users track their profits and time spent during
 
 Data is stored in SQLite at `%APPDATA%\AbyssTracker\tracker.db` on Windows
 (`~/.local/share/AbyssTracker/tracker.db` elsewhere). Set `ABYSS_TRACKER_DB` to use a different file.
+
+## What it reads from your character
+
+Signing in is optional; the app tracks runs you type in without it. If you sign in, it asks CCP's SSO for five read-only ESI scopes:
+
+| Scope | Used for |
+|---|---|
+| `esi-location.read_location.v1` | Seeing when you enter and leave Abyssal Deadspace, to start and stop the timer |
+| `esi-location.read_ship_type.v1` | Knowing which ship is your active ship |
+| `esi-location.read_online.v1` | Pausing detection when you are logged out |
+| `esi-wallet.read_character_wallet.v1` | The read-only wallet figure, and incursion payouts from the wallet journal |
+| `esi-assets.read_assets.v1` | The "Fetch from EVE" button, which values your active ship's cargo |
+
+All scopes are read-only; the app cannot move ISK or items. Your refresh token is kept in the OS keychain (Windows Credential Manager, macOS Keychain). The app talks only to CCP's servers (`login.eveonline.com` and `esi.evetech.net`), and the sign-in callback listens on `127.0.0.1` only. Your runs live in a local SQLite file and are never uploaded. Sign out in the app, or revoke the token from your EVE account page, at any time. The source is here to read.
+
+## How profit works
+
+A run's profit is the **cargo value after minus the cargo value before**, both taken from your active ship's cargo hold. You can type them (EVE's inventory shows an estimated value) or press **Fetch from EVE**. Cargo is priced at CCP's **average market price**, not Jita sell, so the figure is stable and not what you'd get from a particular buy order. Filaments and ammo used up leave the hold, so they come out of the profit on their own.
+
+The wallet takes no part in abyssal runs, because most runners hold loot and sell it later. Items with no market price (abyssal modules, for example) are counted but not valued. Add them by hand. The reasoning is in [ADR 0001](docs/adr/0001-run-profit-from-cargo-not-wallet.md). Incursion sites are the exception: they log the actual payout from your wallet journal.
+
+## Known limits
+
+- Builds exist for Windows and Apple Silicon Macs only. Linux can run from source.
+- Builds are unsigned: expect a SmartScreen or Gatekeeper warning (steps below).
+- ESI caches the wallet journal for an hour, so incursion payouts can show up to an hour after the site.
+- ESI caches assets for up to an hour, so fetched cargo can be stale right after a run. You can edit the numbers.
+- Items inside containers in your hold are not counted.
+- Items without a market price are not valued.
 
 ## Screenshots
 
@@ -134,37 +161,12 @@ python -m unittest discover
 ## Contributing
 Contributions are welcome! If you find any bugs or have suggestions for improvements, please open an issue or submit a pull request.
 
-License
-This project is licensed under the MIT License - see the LICENSE file for details.
-The bundled UI font, Chakra Petch, is under the SIL Open Font License; see `EveProfitManager/assets/fonts/OFL.txt`.
-# Todo:
-1. ~~Function to average out profits hourly in both the abyss and incursion functions~~
-2. ~~error input for the Incursion Module~~
-3. ~~add session details into file for Incursion Module~~
-4. ~~Update incursion module to limit use of Globals and start using parameters~~
-5. ~~Write to file function for abyss module instead of inside Run Function for aesthetics and proper code~~
+## License
 
-# 4/5/24 TextFile Functionality
-Adding to File branch created to work on the functionality to add 
-end of session reports to a text file for more advanced storage
+MIT, see [LICENSE](LICENSE). The bundled UI font, Chakra Petch, is under the SIL Open Font License; see `EveProfitManager/assets/fonts/OFL.txt`.
 
-# 4/10/24
-implemented adding the session details to a Txt file at the end to keep long-term
-track of profits and time spent. + Getting the hang of using branches to work on specific info and then
-pulling to the main.
+Development history is in [CHANGELOG.md](CHANGELOG.md).
 
-# 4/18/24 
-Got back into doing incursion with a cool group of people in WTM
-I now have an abyssal tracker that prompts for profit which should always remain a stable 31m 
-and then asks for time. I am going to focus now on making an average tracker at the end of the session that shows up to tell you how 
-much you made per hour.
+---
 
-# 4/21/24
-Incursion modules Try again prompt has been updated to use 0 and 1 as well as added
-an incursion ran counter like in the abyss module to keep track.
-
-# 10/23/26
-Desktop UI built with CustomTkinter (`gui.py`): live session stats, a built-in abyssal timer, ISK/hour and a
-history page with a chart. Tracking logic moved into `core.py` and now saves every run to SQLite instead of
-appending summaries to Sessions.txt (which can still be imported). Fixed total profit carrying over between
-abyss sessions, and the terminal version now works on Linux/macOS too.
+EVE Online, the EVE logo, EVE and all associated logos and designs are the intellectual property of CCP hf. All artwork, screenshots, characters, vehicles, storylines, world facts or other recognizable features of the intellectual property relating to these trademarks are likewise the intellectual property of CCP hf. EVE Online and the EVE logo are the registered trademarks of CCP hf. All rights reserved. This project is not affiliated with or endorsed by CCP hf.
