@@ -80,8 +80,8 @@ class CliAbyssTest(unittest.TestCase):
         self.assertIn("Please enter a number", out)
 
     def test_the_cli_no_longer_logs_wallet_runs(self):
-        with patch.object(Tracker, "log_abyss_run", side_effect=AssertionError("wallet run")):
-            session, _, _ = self.drive(["1", "1", "100", "130", "5", "0"])
+        self.assertFalse(hasattr(Tracker, "log_abyss_run"))
+        session, _, _ = self.drive(["1", "1", "100", "130", "5", "0"])
         self.assertEqual(session.runs, 1)
 
 

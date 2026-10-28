@@ -311,24 +311,6 @@ class Tracker:
         ).fetchone()
         return row["cargo_after"] if row else None
 
-    def log_abyss_run(self, session_id, isk_before, isk_after, time_left):
-        """
-        Record an abyssal run from wallet amounts and the timer, the way runs were logged
-        before cargo runs. Nothing logs new runs this way now; kept for old wallet-based data.
-
-        Args:
-            session_id (int): Session to add the run to.
-            isk_before (float): Wallet before the run.
-            isk_after (float): Wallet after the run.
-            time_left (float): Minutes left on the abyssal timer when leaving.
-
-        Returns:
-            Run: The recorded run.
-        """
-        _require_finite(isk_before, isk_after)
-        _require_time_left(time_left)
-        return self._add_run(session_id, isk_after - isk_before, MAXTIME - time_left, isk_after)
-
     def log_incursion_site(self, session_id, profit, minutes):
         """Record one incursion site."""
         _require_finite(profit)
@@ -395,52 +377,30 @@ class Tracker:
         return [_run(r) for r in rows]
 
     def delete_run(self, run_id):
-        """
-        Delete a run. For abyssal runs the next run's profit is re-based on the
-        wallet before the deleted run, so the session still matches the wallet change.
-        """
-        run = self.run(run_id)
-        if run is None:
-            return
+        """Delete a run. Every other run keeps its profit."""
         with self.db:
-            if run.isk_after is not None:
-                after = self._next_abyss_run(run)
-                if after:
-                    before = run.isk_after - run.profit
-                    self.db.execute(
-                        "UPDATE runs SET profit = ? WHERE id = ?", (after["isk_after"] - before, after["id"])
-                    )
             self.db.execute("DELETE FROM runs WHERE id = ?", (run_id,))
 
-    def edit_abyss_run(self, run_id, isk_after, time_left):
+    def edit_wallet_run(self, run_id, profit, minutes):
         """
-        Correct an abyssal run's wallet or timer. The wallet before the run stays
-        as it was, and the next run's profit is re-based on the corrected wallet.
+        Correct an old wallet run's profit or time. Its wallet stays as it was
+        and no other run changes.
 
         Args:
-            run_id (int): Abyssal run to change.
-            isk_after (float): Corrected wallet after the run.
-            time_left (float): Corrected minutes left on the abyssal timer.
+            run_id (int): Old wallet run (wallet after set, no cargo values) to change.
+            profit (float): Corrected profit in millions.
+            minutes (float): Corrected run time.
 
         Returns:
             Run: The updated run.
         """
-        _require_finite(isk_after)
-        _require_time_left(time_left)
+        _require_finite(profit)
+        _require_minutes(minutes)
         run = self.run(run_id)
-        if run is None or run.isk_after is None:
-            raise ValueError("Only abyssal runs have a wallet to correct")
-        before = run.isk_after - run.profit
+        if run is None or run.isk_after is None or run.cargo_after is not None:
+            raise ValueError("Only old wallet runs have a profit to correct this way")
         with self.db:
-            self.db.execute(
-                "UPDATE runs SET profit = ?, minutes = ?, isk_after = ? WHERE id = ?",
-                (isk_after - before, MAXTIME - time_left, isk_after, run_id),
-            )
-            after = self._next_abyss_run(run)
-            if after:
-                self.db.execute(
-                    "UPDATE runs SET profit = ? WHERE id = ?", (after["isk_after"] - isk_after, after["id"])
-                )
+            self.db.execute("UPDATE runs SET profit = ?, minutes = ? WHERE id = ?", (profit, minutes, run_id))
         return self.run(run_id)
 
     def edit_cargo_run(self, run_id, cargo_before, cargo_after, time_left):
@@ -479,26 +439,6 @@ class Tracker:
         with self.db:
             self.db.execute("UPDATE runs SET profit = ?, minutes = ? WHERE id = ?", (profit, minutes, run_id))
         return self.run(run_id)
-
-    def _next_abyss_run(self, run):
-        """The abyssal run after this one in its session, whose profit chains off its wallet."""
-        return self.db.execute(
-            "SELECT id, isk_after FROM runs WHERE session_id = ? AND id > ? "
-            "AND isk_after IS NOT NULL ORDER BY id LIMIT 1",
-            (run.session_id, run.id),
-        ).fetchone()
-
-    def current_isk(self, session_id):
-        """Wallet after the latest abyssal run, or the starting wallet if none yet."""
-        row = self.db.execute(
-            "SELECT isk_after FROM runs WHERE session_id = ? AND isk_after IS NOT NULL "
-            "ORDER BY id DESC LIMIT 1",
-            (session_id,),
-        ).fetchone()
-        if row:
-            return row["isk_after"]
-        session = self.session(session_id)
-        return session.starting_isk if session else None
 
     # --- stats ----------------------------------------------------------
 
