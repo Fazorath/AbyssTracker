@@ -31,6 +31,7 @@ from core import (
 from clock import read_clock
 from journal import get_incursion_payouts
 from location import AbyssWatcher, get_location
+from cargo import get_cargo
 from wallet import get_wallet
 from account import SIGN_IN_ERRORS, Account
 from theme import NEUTRAL_THEME, asset_path, load_fonts, theme_for, ui_family
@@ -621,6 +622,7 @@ class SessionPage(Painter, ctk.CTkFrame):
     def build_log_form(self, frame): ...
     def build_timer(self, master): ...
     def entries(self): return []
+    def first_entry(self): return self.entries()[0]  # where the cursor goes for the next run
     def stat_labels(self): return []
     def start_args(self): return {}
     def log_run(self): ...
@@ -686,7 +688,7 @@ class SessionPage(Painter, ctk.CTkFrame):
         self.start_message.configure(text="")
         self.session_id = self.tracker.start_session(self.kind, **args)
         self.app.refresh()
-        self.entries()[0].focus_set()
+        self.first_entry().focus_set()
 
     def end_session(self):
         session = self.tracker.session(self.session_id)
@@ -712,7 +714,7 @@ class SessionPage(Painter, ctk.CTkFrame):
             self.flash(str(err), CRITICAL_TEXT)
             return
         self.flash(logged_text(run), profit_color(run.profit))
-        self.entries()[0].focus_set()
+        self.first_entry().focus_set()
 
     def submit(self):
         """Log the run or site in the form and return it; raises ValueError for a bad value."""
@@ -845,11 +847,12 @@ class SessionPage(Painter, ctk.CTkFrame):
 class AbyssPage(SessionPage):
     kind = ABYSS
     subtitle = (
-        "Enter your wallet and pick the filament before the first run. After each run, enter the new "
-        "wallet total and the time left on the 20-minute timer, or run the built-in timer and leave the time blank."
+        "Pick the filament before the first run. After each run, enter the value of your cargo hold "
+        "before and after it, and the time left on the 20-minute timer, or run the built-in timer and "
+        "leave the time blank."
     )
     unit = "run"
-    pocket_label = "Wallet after run (M)"
+    pocket_label = "Cargo after (M)"
     LOCATION_POLL_MS = 5000  # ESI caches the location for 5 s; the client never asks sooner
     LOCATION_RETRY_MS = 30000  # after a failed read
 
@@ -898,19 +901,23 @@ class AbyssPage(SessionPage):
         self._wallet = None
         self._wallet_note = "reading wallet..."
         super().start_session()
+        self.prefill_cargo_before()
         self.read_wallet()
 
     def resume(self):
         super().resume()
+        self.prefill_cargo_before()
         self.read_wallet()
 
+    def prefill_cargo_before(self):
+        """Cargo before from the session's latest cargo run, or empty when it has none."""
+        latest = self.tracker.latest_cargo_after(self.session_id) if self.session_id else None
+        set_entry(self.cargo_before, "" if latest is None else f"{latest:.15g}")
+
     def build_start_form(self, frame):
-        self.start_isk = self.field(frame, 0, "Wallet now (million ISK)", 220, "e.g. 1,250 or 1.25b")
-        self.start_isk.bind("<Return>", lambda _e: self.start_session())
-        self.start_wallet_note = self.wallet_fetch(frame, 2, self.start_isk)
         weather, tier = self.tracker.last_filament()
         self.tier_labels = [tier_label(t) for t in range(len(TIERS))]
-        self.tier = self.choice(frame, 1, "Tier", self.tier_labels, self.tier_labels[tier or 0], 170)
+        self.tier = self.choice(frame, 0, "Tier", self.tier_labels, self.tier_labels[tier or 0], 170)
         self.paint(ctk.CTkLabel(frame, text="Weather", font=font(12)), text_color="soft").grid(
             row=2, column=0, columnspan=2, sticky="w", pady=(16, 0)
         )
@@ -920,46 +927,45 @@ class AbyssPage(SessionPage):
         self.painters.append(self.weather.set_theme)
 
     def build_log_form(self, frame):
-        self.after_isk = self.field(frame, 0, "Wallet after run (M)", 180, "e.g. 1,281")
-        self.time_left = self.field(frame, 1, "Time left (min)", 120, "blank = timer")
-        self.log_wallet_note = self.wallet_fetch(frame, 3, self.after_isk)
+        self.cargo_before = self.field(frame, 0, "Cargo before (M)", 150, "e.g. 120")
+        self.cargo_after = self.field(frame, 1, "Cargo after (M)", 150, "e.g. 164.5")
+        self.time_left = self.field(frame, 2, "Time left (min)", 120, "blank = timer")
+        self.fetch_buttons = {}
+        for column, which in enumerate(("before", "after")):
+            button = self.paint(
+                ctk.CTkButton(frame, text="Fetch from EVE", width=150, height=28, font=font(12),
+                              border_width=1, command=lambda w=which: self.fetch_cargo(w)),
+                fg_color=lambda _t: "transparent", border_color="line", hover_color="line", text_color="soft",
+            )
+            button.grid(row=2, column=column, sticky="w", padx=(0, 12), pady=(6, 0))
+            self.fetch_buttons[which] = button
+            note = self.paint(ctk.CTkLabel(frame, text="", font=font(11), wraplength=150, justify="left"),
+                              text_color="soft")
+            note.grid(row=3, column=column, sticky="nw", padx=(0, 12))
+            setattr(self, f"cargo_{which}_note", note)
 
-    def wallet_fetch(self, frame, column, entry):
-        """Add a 'Fetch from EVE' button that fills the wallet entry; returns its status label."""
-        note = self.paint(ctk.CTkLabel(frame, text="", font=font(11), justify="left", wraplength=190), text_color="soft")
-        note.grid(row=0, column=column, sticky="w")
-        self.paint(
-            ctk.CTkButton(frame, text="Fetch from EVE", width=130, height=36, fg_color="transparent",
-                          border_width=1, text_color=INK, command=lambda: self.fetch_wallet(entry, note)),
-            border_color="line", hover_color="panel",
-        ).grid(row=1, column=column, sticky="w", pady=(2, 0))
-        return note
+    def say_cargo_note(self, which, text, problem=False):
+        note = getattr(self, f"cargo_{which}_note")
+        note.configure(text=text, text_color=CRITICAL_TEXT if problem else self.theme.soft)
 
-    def fetch_wallet(self, entry, note):
-        """Read the wallet from ESI into `entry`. The balance is cached by ESI for about two minutes."""
-        def show(text, color=None):
-            note.configure(text=text, text_color=color or self.theme.soft)
-
-        try:
-            client = self.app.account.client()
-        except SIGN_IN_ERRORS as e:
-            show(str(e), CRITICAL_TEXT)
-            return
+    def fetch_cargo(self, which):
+        """Fill Cargo before or after with the active ship's cargo value from ESI, off the UI thread."""
+        client, why = self.signed_in_client()
         if client is None:
-            show("Sign in under Settings first.", CRITICAL_TEXT)
+            self.say_cargo_note(which, why, problem=True)
             return
-        show("Fetching...")
+        self.say_cargo_note(which, "reading cargo...")
 
-        def done(wallet, error):
+        def done(cargo, error):
             if error is not None:
-                show(str(error), CRITICAL_TEXT)
+                self.say_cargo_note(which, str(error), problem=True)
                 return
-            entry.delete(0, "end")
-            entry.insert(0, f"{wallet.millions:.2f}")
-            stamp = time.strftime("%H:%M:%S", time.localtime(wallet.fetched_at))
-            show(f"From EVE at {stamp}. ESI refreshes about every 2 min; edit to override.")
+            set_entry(getattr(self, f"cargo_{which}"), f"{cargo.millions:.2f}")
+            stamp = f"From EVE at {datetime.fromtimestamp(cargo.fetched_at):%H:%M}"
+            unpriced = f" · {cargo.unpriced} unpriced" if cargo.unpriced else ""
+            self.say_cargo_note(which, f"{stamp}{unpriced}. ESI can lag up to an hour; edit if it's off.")
 
-        self.app.run_async(lambda: get_wallet(client, client.character.id), done)
+        self.app.run_async(lambda: get_cargo(client, client.character.id), done)
 
     def reset_watcher(self):
         """Detection switched on: the next reading is a fresh baseline."""
@@ -981,8 +987,8 @@ class AbyssPage(SessionPage):
             if self.timer.running:
                 self.timer.toggle()
             left = self.timer.face().text
-            self.notify(f"Left the abyss with {left} left. Enter your wallet and log the run.", self.theme.accent)
-            self.after_isk.focus_set()
+            self.notify(f"Left the abyss with {left} left. Enter your cargo after and log the run.", self.theme.accent)
+            self.cargo_after.focus_set()
 
     def build_timer(self, master):
         return TimerPanel(master, countdown_minutes=MAXTIME)
@@ -991,10 +997,13 @@ class AbyssPage(SessionPage):
         return theme_for(ABYSS, self.weather.get())
 
     def entries(self):
-        return [self.after_isk, self.time_left]
+        return [self.cargo_before, self.cargo_after, self.time_left]
+
+    def first_entry(self):
+        return self.cargo_after if self.cargo_before.get().strip() else self.cargo_before
 
     def pocket_fields(self):
-        return self.after_isk, self.time_left
+        return self.cargo_after, self.time_left
 
     def stat_labels(self):
         return [("profit", "Session"), ("rate", "ISK/hr"), ("time", "Time"),
@@ -1011,28 +1020,40 @@ class AbyssPage(SessionPage):
 
     def start_args(self):
         return {
-            "starting_isk": parse_isk(self.start_isk.get(), "your wallet"),
             "weather": self.weather.get(),
             "tier": self.tier_labels.index(self.tier.get()),
         }
 
     def log_run(self):
-        after = parse_isk(self.after_isk.get(), "wallet after")
+        before = parse_isk(self.cargo_before.get(), "cargo before")
+        after = parse_isk(self.cargo_after.get(), "cargo after")
         left = self.timer_or(self.time_left, "time left")
-        before = self.tracker.current_isk(self.session_id)
-        return self.tracker.log_abyss_run(self.session_id, before, after, left)
+        return self.tracker.log_cargo_run(self.session_id, before, after, left)
 
     def after_log(self):
-        self.after_isk.delete(0, "end")
+        self.prefill_cargo_before()
+        for which in ("before", "after"):
+            self.say_cargo_note(which, "")
+        self.cargo_after.delete(0, "end")
         self.time_left.delete(0, "end")
         self.read_wallet()
 
     def edit_fields(self, run):
-        return [("Wallet after run (M)", f"{run.isk_after:g}"), ("Time left (min)", f"{MAXTIME - run.minutes:g}")]
+        left = ("Time left (min)", f"{MAXTIME - run.minutes:g}")
+        if run.cargo_after is None:  # an old wallet run
+            return [("Wallet after run (M)", f"{run.isk_after:g}"), left]
+        return [("Cargo before (M)", f"{run.cargo_before:g}"), ("Cargo after (M)", f"{run.cargo_after:g}"), left]
 
-    def save_edit(self, run, isk_after, time_left):
-        return self.tracker.edit_abyss_run(
-            run.id, parse_isk(isk_after, "wallet after"), parse_minutes(time_left, "time left")
+    def save_edit(self, run, *values):
+        if run.cargo_after is None:
+            isk_after, time_left = values
+            return self.tracker.edit_abyss_run(
+                run.id, parse_isk(isk_after, "wallet after"), parse_minutes(time_left, "time left")
+            )
+        before, after, time_left = values
+        return self.tracker.edit_cargo_run(
+            run.id, parse_isk(before, "cargo before"), parse_isk(after, "cargo after"),
+            parse_minutes(time_left, "time left"),
         )
 
     def update_stats(self, session, runs):
@@ -1635,7 +1656,8 @@ class SettingsPage(ctk.CTkFrame):
         ctk.CTkLabel(inner, text="EVE account", font=font(20, "bold"), text_color=INK).pack(anchor="w")
         ctk.CTkLabel(
             inner, font=font(13), text_color=t.soft, justify="left", wraplength=560,
-            text="Sign in with your EVE character so the app can read your wallet. Your browser opens "
+            text="Sign in with your EVE character so the app can read your wallet balance, location and "
+                 "incursion payouts. Your browser opens "
                  "for the CCP login; the app never sees your password.",
         ).pack(anchor="w", pady=(4, 20))
         self.active = ctk.CTkLabel(inner, text="", font=font(15), text_color=INK)
@@ -2074,7 +2096,7 @@ class App(ctk.CTk):
             self.iconbitmap(asset_path("icon.ico"))
         else:
             # Keep a reference: Tk drops the image once Python garbage-collects it
-            self.icon = tk.PhotoImage(file=asset_path("icon.png"))
+            self.icon = tk.PhotoImage(master=self, file=asset_path("icon.png"))
             self.iconphoto(True, self.icon)
 
     def bring_to_front(self):

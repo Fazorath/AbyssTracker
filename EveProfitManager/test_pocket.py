@@ -24,7 +24,7 @@ class PocketOverlayTest(unittest.TestCase):
         self.addCleanup(folder.cleanup)
         self.tracker = Tracker(os.path.join(folder.name, "tracker.db"))
         self.addCleanup(self.tracker.close)
-        self.session = self.tracker.start_session(ABYSS, starting_isk=1000, weather="Gamma", tier=2)
+        self.session = self.tracker.start_session(ABYSS, weather="Gamma", tier=2)
         self.app = gui.App(self.tracker)
         self.addCleanup(self.app.destroy)
         self.app.update()
@@ -39,8 +39,11 @@ class PocketOverlayTest(unittest.TestCase):
         self.assertEqual(self.app.state(), "withdrawn")
         self.assertTrue(pocket.attributes("-topmost"))
 
-    def test_logs_a_run_from_the_wallet_using_the_shared_timer(self):
+    def test_logs_a_run_from_cargo_after_using_the_prefilled_cargo_before_and_shared_timer(self):
+        page = self.app.pages["abyss"]
+        page.cargo_before.insert(0, "1,000")
         pocket = self.enter()
+        self.assertEqual(pocket.amount_label.cget("text"), "Cargo after (M)")
         pocket.toggle_btn.invoke()
         self.assertTrue(self.app.pages["abyss"].timer.running)
         self.app.pages["abyss"].timer.elapsed_before = 8 * 60  # pretend 8 minutes passed
@@ -55,6 +58,7 @@ class PocketOverlayTest(unittest.TestCase):
         self.assertEqual(pocket.amount.get(), "")
         self.assertFalse(self.app.pages["abyss"].timer.running)  # reset for the next run
         self.assertIn("+44.5", pocket.message.cget("text"))
+        self.assertEqual(page.cargo_before.get(), "1044.5")  # ready for the next run
 
     def test_logging_without_the_timer_explains_and_logs_nothing(self):
         pocket = self.enter()
@@ -65,7 +69,8 @@ class PocketOverlayTest(unittest.TestCase):
 
     def test_a_bad_value_leaves_the_full_window_form_as_it_was(self):
         page = self.app.pages["abyss"]
-        page.after_isk.insert(0, "1,200")
+        page.cargo_before.insert(0, "100")
+        page.cargo_after.insert(0, "1,200")
         page.time_left.insert(0, "6")
         pocket = self.enter()
         pocket.toggle_btn.invoke()
@@ -74,13 +79,13 @@ class PocketOverlayTest(unittest.TestCase):
         pocket.log_btn.invoke()
         self.assertEqual(self.tracker.runs(self.session), [])
         self.assertIn("number", pocket.message.cget("text"))
-        self.assertEqual((page.after_isk.get(), page.time_left.get()), ("1,200", "6"))
+        self.assertEqual((page.cargo_before.get(), page.cargo_after.get(), page.time_left.get()), ("100", "1,200", "6"))
 
     def test_expand_keeps_a_value_typed_but_not_logged(self):
         pocket = self.enter()
         pocket.amount.insert(0, "1,300")
         pocket.expand_btn.invoke()
-        self.assertEqual(self.app.pages["abyss"].after_isk.get(), "1,300")
+        self.assertEqual(self.app.pages["abyss"].cargo_after.get(), "1,300")
 
     def test_a_running_timer_past_zero_still_offers_pause(self):
         pocket = self.enter()

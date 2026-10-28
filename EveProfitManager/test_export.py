@@ -47,6 +47,30 @@ class ExportTest(unittest.TestCase):
         self.assertEqual(rows[2]["weather"], "")
         self.assertEqual(rows[2]["isk_after_millions"], "")
 
+    def test_csv_shows_the_cargo_values_of_cargo_runs_and_leaves_them_empty_for_wallet_runs(self):
+        sid = self.tracker.start_session(ABYSS, starting_isk=1000, weather="Dark", tier=3)
+        self.tracker.log_abyss_run(sid, 1000, 1030, time_left=10)
+        self.tracker.log_cargo_run(sid, 50, 92.5, time_left=12)
+        out = self.dir / "out.csv"
+        self.tracker.export_csv(out)
+        with open(out, newline="", encoding="utf-8") as f:
+            header = next(csv.reader(f))
+        self.assertEqual(
+            header[header.index("profit_millions"):],
+            ["profit_millions", "minutes", "isk_after_millions", "runs", "cargo_before_millions",
+             "cargo_after_millions"],
+        )  # new columns go last, so every older column keeps its place
+        wallet, cargo = self.rows(out)
+        self.assertEqual(
+            (wallet["isk_after_millions"], wallet["cargo_before_millions"], wallet["cargo_after_millions"]),
+            ("1030.0", "", ""),
+        )
+        self.assertEqual(
+            (cargo["isk_after_millions"], cargo["cargo_before_millions"], cargo["cargo_after_millions"]),
+            ("", "50.0", "92.5"),
+        )
+        self.assertEqual(float(cargo["profit_millions"]), 42.5)
+
     def test_csv_can_be_limited_to_one_kind(self):
         self.seed()
         out = self.dir / "out.csv"
@@ -133,7 +157,15 @@ class BackupTest(unittest.TestCase):
         self.tracker.restore(old)
         self.assertEqual(self.tracker.totals().profit, 10)
         self.assertIsNone(self.tracker.session(1).weather)
+        self.assertIsNone(self.tracker.runs(1)[0].cargo_after)
+        self.tracker.log_cargo_run(1, 0, 5, time_left=10)
         self.tracker.start_session(ABYSS, starting_isk=1, weather="Dark", tier=1)
+        out = self.dir / "out.csv"
+        self.assertEqual(self.tracker.export_csv(out), 3)
+        with open(out, newline="", encoding="utf-8") as f:
+            old_run, cargo_run, _empty = list(csv.DictReader(f))
+        self.assertEqual((old_run["cargo_before_millions"], old_run["cargo_after_millions"]), ("", ""))
+        self.assertEqual((cargo_run["cargo_before_millions"], cargo_run["cargo_after_millions"]), ("0.0", "5.0"))
 
     def test_restore_refuses_files_that_are_not_trackers(self):
         self.log(50)
