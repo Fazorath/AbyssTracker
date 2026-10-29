@@ -50,7 +50,17 @@ Delete the throwaway db afterwards. The release `.exe` is out of scope.
 5. **Pages:** open and screenshot Abyss, Incursion, History and pocket mode.
 6. **Pocket on top:** enter pocket mode and check it by window geometry, not a screenshot (EVE is masked in computer-use screenshots). Read the EVE client and pocket windows' rects and the pocket's `WS_EX_TOPMOST` flag, move the pocket over the client with `SetWindowPos` on the pocket's own handle, and confirm the pocket is above the client in z-order. Pass if it is; fail if it's covered or loses topmost. After **Unpin**, the topmost flag must clear. See the notes below for the calls.
 
-Active-ship and cargo checks are not part of this skill (see #52).
+7. **Active ship:** read-only. With the character docked, run the headless reader below. It prints the ship's name and type from ESI (`/characters/{id}/ship`). Ask the user to read the active ship's name and type in the client (you may not touch EVE); they must match. Don't put the ship name in the PR; report only match / no match.
+8. **Cargo value:** on the Abyss page click **Fetch from EVE** on Cargo after. Note the "From EVE at HH:MM" stamp (ESI's own fetch time) and any "· N unpriced". Ask the user to read the estimated value of the **cargo hold** in the client's inventory (cargo hold only, not drones, fitted modules or loaded ammo; `CONTEXT.md`). The figures must match to within CCP's average-price rounding, ignoring the unpriced items the app counts but leaves out. ESI caches assets for up to an hour (ADR 0001), so if they differ, record the reading time, wait until an hour after the stamp, fetch again and compare again before calling it a fail. A mismatch that survives the second reading is a fail; say so with both readings' times (no ISK figures needed beyond the difference).
+
+Headless ship reader (prints only the ship name and type, never the token):
+
+```powershell
+cd EveProfitManager
+..\.venv\Scripts\python -c "from account import Account; c = Account().client(); s = c.get(f'/characters/{c.character.id}/ship'); print(s['ship_name'], s['ship_type_id'])"
+```
+
+`Account().client()` is the same call the GUI makes in `signed_in_client` (it returns None when nobody is signed in).
 
 ## Report
 
